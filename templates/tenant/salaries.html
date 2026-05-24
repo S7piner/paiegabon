@@ -1,0 +1,90 @@
+{% extends "tenant/base.html" %}
+{% block title %}Salariés — {{ tenant.denomination }}{% endblock %}
+{% block content %}
+
+<div class="flex items-center justify-between mb-6">
+  <div>
+    <h1 class="text-2xl font-black text-gray-900">Salariés</h1>
+    <p class="text-gray-500 text-sm mt-1">{{ salaries|length }} salarié(s) trouvé(s)</p>
+  </div>
+  <a href="/salaries/nouveau" class="btn-primary">+ Nouveau salarié</a>
+</div>
+
+<!-- Filtres -->
+<div class="card p-4 mb-6">
+  <form method="GET" class="flex gap-3">
+    <input type="text" name="q" value="{{ q }}" placeholder="🔍 Rechercher nom, matricule, poste..."
+      class="flex-1 form-input"/>
+    <select name="statut" class="form-input" style="width:180px">
+      <option value="">Tous les statuts</option>
+      <option value="ACTIF" {% if statut=='ACTIF' %}selected{% endif %}>Actifs</option>
+      <option value="INACTIF" {% if statut=='INACTIF' %}selected{% endif %}>Inactifs</option>
+    </select>
+    <button type="submit" class="btn-primary">Filtrer</button>
+    {% if q or statut %}
+    <a href="/salaries" class="btn-secondary">Effacer</a>
+    {% endif %}
+  </form>
+</div>
+
+<!-- Tableau -->
+<div class="card overflow-hidden">
+  <table>
+    <thead>
+      <tr>
+        <th>Matricule</th>
+        <th>Nom & Prénom</th>
+        <th>Emploi</th>
+        <th style="text-align:center">Catégorie</th>
+        <th style="text-align:right">Salaire base</th>
+        <th style="text-align:center">Statut</th>
+        <th style="text-align:center">Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for s in salaries %}
+      <tr>
+        <td class="font-mono text-xs text-gray-500">{{ s.matricule }}</td>
+        <td>
+          <div class="flex items-center gap-3">
+            <div style="width:2rem;height:2rem;border-radius:50%;background:#1a2332;color:white;display:flex;align-items:center;justify-content:center;font-size:.75rem;font-weight:900;flex-shrink:0">
+              {{ s.nom[0] }}{{ s.prenom[0] }}
+            </div>
+            <div>
+              <div class="font-bold text-gray-900">{{ s.nom }} {{ s.prenom }}</div>
+              <div class="text-xs text-gray-400">Embauché le {{ s.date_embauche|date_fr }}</div>
+            </div>
+          </div>
+        </td>
+        <td class="text-gray-700">{{ s.emploi or '—' }}</td>
+        <td style="text-align:center">
+          <span style="background:#f3f4f6;color:#374151;font-size:.75rem;font-weight:700;padding:.125rem .5rem;border-radius:.5rem">
+            {{ s.categorie.code if s.categorie else '—' }}
+          </span>
+        </td>
+        <td style="text-align:right" class="font-bold text-gray-900">
+          {% if s.contrats %}{{ s.contrats[-1].salaire_base|fcfa }}{% else %}—{% endif %}
+        </td>
+        <td style="text-align:center">
+          <span class="badge-{{ s.statut|lower }}">{{ s.statut }}</span>
+        </td>
+        <td style="text-align:center">
+          <a href="/salaries/{{ s.id }}" class="text-blue-600 text-xs font-bold hover:underline">Voir</a>
+          <span class="text-gray-300 mx-1">|</span>
+          <a href="/bulletins/saisie?salarie_id={{ s.id }}" class="text-amber-600 text-xs font-bold hover:underline">Bulletin</a>
+        </td>
+      </tr>
+      {% else %}
+      <tr>
+        <td colspan="7" style="text-align:center;padding:3rem;color:#9ca3af">
+          <div style="font-size:2rem;margin-bottom:.5rem">👤</div>
+          <p>Aucun salarié trouvé</p>
+          <a href="/salaries/nouveau" class="btn-primary" style="display:inline-block;margin-top:.75rem">Créer le premier salarié</a>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% endblock %}

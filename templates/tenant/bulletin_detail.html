@@ -1,0 +1,178 @@
+{% extends "tenant/base.html" %}
+{% block title %}Bulletin {{ bulletin.salarie.nom_complet }}{% endblock %}
+{% block content %}
+
+<div class="flex items-center gap-3 mb-6">
+  <a href="/bulletins" class="text-gray-400 hover:text-gray-700 text-sm">← Bulletins</a>
+  <h1 class="text-2xl font-black text-gray-900">Bulletin de paie</h1>
+  <span class="badge-{{ bulletin.statut|lower }}">{{ bulletin.statut }}</span>
+</div>
+
+<!-- En-tête bulletin -->
+<div class="card p-6 mb-6">
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:1.5rem">
+    <div>
+      <div class="text-xs text-gray-400 uppercase tracking-widest mb-1">Salarié</div>
+      <div class="text-xl font-black">{{ bulletin.salarie.nom_complet }}</div>
+      <div class="text-gray-500">{{ bulletin.salarie.emploi }}</div>
+      <div class="font-mono text-xs text-gray-400 mt-1">{{ bulletin.salarie.matricule }}</div>
+    </div>
+    <div>
+      <div class="text-xs text-gray-400 uppercase tracking-widest mb-1">Période</div>
+      <div class="text-xl font-black">{{ bulletin.periode.libelle_complet }}</div>
+      <div class="text-gray-500">{{ bulletin.nb_jours_travailles or '—' }} jours travaillés</div>
+    </div>
+    <div style="text-align:right">
+      <div class="text-xs text-gray-400 uppercase tracking-widest mb-1">Net à payer</div>
+      <div class="text-3xl font-black" style="color:#1a2332">{{ bulletin.net_a_payer|fcfa }}</div>
+    </div>
+  </div>
+</div>
+
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:1.5rem">
+  <!-- Éléments de salaire -->
+  <div class="card p-6">
+    <h2 class="text-xs font-bold text-gray-400 uppercase tracking-widest mb-4">Éléments de salaire</h2>
+    {% macro ligne(label, val, neg=False) %}
+      {% if val and val|float > 0 %}
+      <div style="display:flex;justify-content:space-between;padding:.375rem 0;border-bottom:1px solid #f9fafb;font-size:.875rem">
+        <span class="text-gray-600">{{ label }}</span>
+        <span class="font-bold {{ 'text-red-600' if neg else 'text-gray-900' }}">{{ '- ' if neg else '' }}{{ val|fcfa }}</span>
+      </div>
+      {% endif %}
+    {% endmacro %}
+    {{ ligne("Salaire de base", bulletin.salaire_base) }}
+    {{ ligne("Heures sup +10%", bulletin.heures_sup_10) }}
+    {{ ligne("Heures sup +30%", bulletin.heures_sup_30) }}
+    {{ ligne("Heures sup +40%", bulletin.heures_sup_40) }}
+    {{ ligne("Heures sup +70%", bulletin.heures_sup_70) }}
+    {{ ligne("Absences", bulletin.absences, True) }}
+    {{ ligne("Sursalaire", bulletin.sursalaire) }}
+    {{ ligne("Prime de caisse", bulletin.prime_caisse) }}
+    {{ ligne("Carburant", bulletin.carburant) }}
+    {{ ligne("Prime d'ancienneté", bulletin.prime_anciennete) }}
+    {{ ligne("Indemnité logement", bulletin.indem_logement) }}
+    {{ ligne("Indemnité domesticité", bulletin.indem_domesticite) }}
+    {{ ligne("Indemnité eau & élec.", bulletin.indem_eau_electricite) }}
+    {{ ligne("Indemnité nourriture", bulletin.indem_nourriture) }}
+    {{ ligne("Prime transport", bulletin.prime_transport) }}
+    {{ ligne("Prime responsabilité", bulletin.prime_responsabilite) }}
+    {{ ligne("Prime rendement", bulletin.prime_rendement) }}
+    {{ ligne("Prime assiduité", bulletin.prime_assiduité) }}
+    {{ ligne("Prime qualité", bulletin.prime_qualite) }}
+    {{ ligne("Prime performance", bulletin.prime_performance) }}
+    {{ ligne("Allocations congé", bulletin.allocations_conge) }}
+    <div style="display:flex;justify-content:space-between;padding:.5rem 0;border-top:2px solid #e5e7eb;margin-top:.25rem;font-weight:900;font-size:.875rem">
+      <span>SALAIRE BRUT</span><span>{{ bulletin.salaire_brut|fcfa }}</span>
+    </div>
+  </div>
+
+  <div style="display:flex;flex-direction:column;gap:1.5rem">
+    <!-- Cotisations -->
+    <div class="card p-5">
+      <h2 class="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">Cotisations salariales</h2>
+      {% macro cotis(label, base, montant, taux) %}
+      <div style="padding:.5rem 0;border-bottom:1px solid #f9fafb;font-size:.875rem">
+        <div style="display:flex;justify-content:space-between">
+          <span class="text-gray-600">{{ label }} ({{ taux }})</span>
+          <span class="font-bold text-red-600">- {{ montant|fcfa }}</span>
+        </div>
+        <div class="text-xs text-gray-400">Base : {{ base|fcfa }}</div>
+      </div>
+      {% endmacro %}
+      {{ cotis("CNSS salarié", bulletin.base_cnss, bulletin.cnss_salarie, "5%") }}
+      {{ cotis("CNAMGS salarié", bulletin.base_cnamgs, bulletin.cnamgs_salarie, "2%") }}
+      {{ cotis("TCS", bulletin.base_tcs, bulletin.tcs, "5%") }}
+      {{ cotis("IRPP", bulletin.base_irpp, bulletin.irpp, "barème") }}
+    </div>
+
+    <!-- Résultat net -->
+    <div style="background:#1a2332;border-radius:1rem;padding:1.25rem;color:white">
+      <div style="font-size:.75rem;font-weight:700;opacity:.6;margin-bottom:.75rem;text-transform:uppercase;letter-spacing:.05em">Calcul final</div>
+      <div style="display:flex;justify-content:space-between;font-size:.875rem;margin-bottom:.375rem">
+        <span style="opacity:.7">Salaire brut</span><span class="font-bold">{{ bulletin.salaire_brut|fcfa }}</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;font-size:.875rem;margin-bottom:.375rem">
+        <span style="opacity:.7">- CNSS salarié</span><span style="color:#fca5a5">- {{ bulletin.cnss_salarie|fcfa }}</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;font-size:.875rem;margin-bottom:.375rem">
+        <span style="opacity:.7">- CNAMGS salarié</span><span style="color:#fca5a5">- {{ bulletin.cnamgs_salarie|fcfa }}</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;font-size:.875rem;margin-bottom:.375rem">
+        <span style="opacity:.7">- TCS</span><span style="color:#fca5a5">- {{ bulletin.tcs|fcfa }}</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;font-size:.875rem;margin-bottom:.375rem">
+        <span style="opacity:.7">- IRPP</span><span style="color:#fca5a5">- {{ bulletin.irpp|fcfa }}</span>
+      </div>
+      {% if bulletin.acompte and bulletin.acompte|float > 0 %}
+      <div style="display:flex;justify-content:space-between;font-size:.875rem;margin-bottom:.375rem">
+        <span style="opacity:.7">- Acompte</span><span style="color:#fca5a5">- {{ bulletin.acompte|fcfa }}</span>
+      </div>
+      {% endif %}
+      <div style="border-top:2px solid rgba(255,255,255,.2);margin-top:.75rem;padding-top:.75rem;display:flex;justify-content:space-between;align-items:center">
+        <span style="font-weight:900;font-size:1rem">NET À PAYER</span>
+        <span style="font-size:1.5rem;font-weight:900;color:#6ee7b7">{{ bulletin.net_a_payer|fcfa }}</span>
+      </div>
+    </div>
+
+    <!-- Charges patronales -->
+    <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:1rem;padding:1.25rem">
+      <h2 class="text-xs font-bold text-blue-600 uppercase tracking-widest mb-3">Charges patronales (info)</h2>
+      {% macro pat(label, val, taux) %}
+      <div style="display:flex;justify-content:space-between;font-size:.875rem;padding:.25rem 0">
+        <span style="color:#1e40af">{{ label }} ({{ taux }})</span>
+        <span class="font-bold" style="color:#1e3a8a">{{ val|fcfa }}</span>
+      </div>
+      {% endmacro %}
+      {{ pat("CNSS patronal", bulletin.cnss_patronale, "18%") }}
+      {{ pat("CNAMGS patronal", bulletin.cnamgs_patronale, "4,1%") }}
+      {{ pat("FNH", bulletin.fnh, "3%") }}
+      {{ pat("CFP", bulletin.cfp, "0,5%") }}
+    </div>
+
+    <!-- Actions -->
+    <div class="card p-4" style="display:flex;flex-direction:column;gap:.5rem">
+      <a href="/bulletins/{{ bulletin.id }}/imprimer" target="_blank"
+         class="btn-primary" style="display:block;text-align:center">🖨️ Imprimer le bulletin</a>
+
+      <!-- Envoi par email -->
+      <div style="border-top:1px solid #f3f4f6;padding-top:.75rem;margin-top:.25rem">
+        <div style="font-size:.7rem;font-weight:700;color:#6b7280;text-transform:uppercase;margin-bottom:.375rem">
+          📧 Envoyer par email
+        </div>
+        <form method="POST" action="/bulletins/{{ bulletin.id }}/envoyer-email">
+          <input type="email" name="email_dest"
+            value="{{ bulletin.salarie.email or '' }}"
+            placeholder="email@exemple.com"
+            style="width:100%;border:1px solid #e5e7eb;border-radius:.5rem;padding:.375rem .625rem;font-size:.8rem;margin-bottom:.375rem;box-sizing:border-box"/>
+          {% if not bulletin.salarie.email %}
+          <div style="font-size:.7rem;color:#dc2626;margin-bottom:.375rem">
+            ⚠️ Aucun email enregistré pour ce salarié
+          </div>
+          {% endif %}
+          <button type="submit"
+            style="width:100%;background:#2563eb;color:white;padding:.5rem;border-radius:.5rem;font-weight:700;font-size:.8rem;border:none;cursor:pointer">
+            📧 Envoyer le bulletin
+          </button>
+        </form>
+      </div>
+      {% if bulletin.statut == 'BROUILLON' %}
+      <form method="POST" action="/bulletins/{{ bulletin.id }}/valider">
+        <button type="submit" style="width:100%;background:#059669;color:white;padding:.625rem;border-radius:.75rem;font-weight:700;font-size:.875rem;border:none;cursor:pointer">✅ Valider</button>
+      </form>
+      <a href="/bulletins/saisie?bulletin_id={{ bulletin.id }}" style="display:block;text-align:center;background:#f59e0b;color:white;padding:.625rem;border-radius:.75rem;font-weight:700;font-size:.875rem;text-decoration:none">✏️ Modifier</a>
+      <form method="POST" action="/bulletins/{{ bulletin.id }}/supprimer"
+        onsubmit="return confirm('Supprimer ce bulletin ?')">
+        <button type="submit" style="width:100%;background:#dc2626;color:white;padding:.625rem;border-radius:.75rem;font-weight:700;font-size:.875rem;border:none;cursor:pointer">🗑️ Supprimer</button>
+      </form>
+      {% endif %}
+      {% if bulletin.statut == 'VALIDÉ' %}
+      <form method="POST" action="/bulletins/{{ bulletin.id }}/paye">
+        <button type="submit" style="width:100%;background:#1a2332;color:white;padding:.625rem;border-radius:.75rem;font-weight:700;font-size:.875rem;border:none;cursor:pointer">💳 Marquer comme payé</button>
+      </form>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+{% endblock %}

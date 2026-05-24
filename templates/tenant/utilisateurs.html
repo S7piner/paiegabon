@@ -1,0 +1,86 @@
+{% extends "tenant/base.html" %}
+{% block title %}Utilisateurs — {{ tenant.denomination }}{% endblock %}
+{% block content %}
+
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.5rem">
+  <div>
+    <h1 class="text-2xl font-black text-gray-900">Utilisateurs</h1>
+    <p class="text-gray-500 text-sm mt-1">Gestion des accès à votre espace entreprise</p>
+  </div>
+  {% if current_user.is_tenant_admin %}
+  <a href="/utilisateurs/nouveau" class="btn-primary">+ Nouvel utilisateur</a>
+  {% endif %}
+</div>
+
+<div style="display:grid;grid-template-columns:2fr 1fr;gap:1.5rem">
+  <div class="card overflow-hidden">
+    <table>
+      <thead>
+        <tr>
+          <th>Utilisateur</th>
+          <th style="text-align:center">Rôle</th>
+          <th style="text-align:center">Statut</th>
+          <th>Dernière connexion</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for u in utilisateurs %}
+        <tr>
+          <td>
+            <div style="display:flex;align-items:center;gap:.75rem">
+              <div style="width:2rem;height:2rem;border-radius:50%;background:#1a2332;color:white;display:flex;align-items:center;justify-content:center;font-size:.7rem;font-weight:900">
+                {{ u.prenom[0] }}{{ u.nom[0] }}
+              </div>
+              <div>
+                <div style="font-weight:700;font-size:.875rem">{{ u.nom_complet }}
+                  {% if u.id == current_user.id %}<span style="font-size:.7rem;color:#9ca3af">(vous)</span>{% endif %}
+                </div>
+                <div style="font-size:.75rem;color:#9ca3af">{{ u.email }}</div>
+              </div>
+            </div>
+          </td>
+          <td style="text-align:center">
+            <span style="font-size:.75rem;font-weight:700;padding:.125rem .5rem;border-radius:9999px;
+              {% if u.role=='TENANT_ADMIN' %}background:#dbeafe;color:#1e40af
+              {% elif u.role=='GESTIONNAIRE' %}background:#fef3c7;color:#92400e
+              {% else %}background:#f3f4f6;color:#6b7280{% endif %}">
+              {{ u.role }}
+            </span>
+          </td>
+          <td style="text-align:center">
+            <span style="font-size:.75rem;font-weight:700;padding:.125rem .5rem;border-radius:9999px;
+              {% if u.actif %}background:#d1fae5;color:#065f46{% else %}background:#fee2e2;color:#991b1b{% endif %}">
+              {{ 'ACTIF' if u.actif else 'INACTIF' }}
+            </span>
+          </td>
+          <td style="font-size:.8rem;color:#6b7280">
+            {{ u.derniere_connexion|date_fr if u.derniere_connexion else 'Jamais' }}
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="4" style="text-align:center;padding:2rem;color:#9ca3af">Aucun utilisateur</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card p-5">
+    <h2 class="text-xs font-bold text-gray-400 uppercase tracking-widest mb-4">Rôles et permissions</h2>
+    <div style="display:flex;flex-direction:column;gap:.75rem;font-size:.875rem">
+      <div style="background:#dbeafe;border-radius:.75rem;padding:.75rem">
+        <div style="font-weight:700;color:#1e40af">Administrateur</div>
+        <div style="color:#1e3a8a;font-size:.8rem">Accès total — paramètres, utilisateurs, suppression</div>
+      </div>
+      <div style="background:#fef3c7;border-radius:.75rem;padding:.75rem">
+        <div style="font-weight:700;color:#92400e">Gestionnaire</div>
+        <div style="color:#78350f;font-size:.8rem">Saisie bulletins, gestion salariés, pointage</div>
+      </div>
+      <div style="background:#f3f4f6;border-radius:.75rem;padding:.75rem">
+        <div style="font-weight:700;color:#374151">Lecture</div>
+        <div style="color:#6b7280;font-size:.8rem">Consultation uniquement, sans modification</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
