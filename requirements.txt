@@ -3,11 +3,10 @@ flask-sqlalchemy==3.1.1
 flask-login==0.6.3
 flask-mail==0.10.0
 werkzeug==3.0.1
-sqlalchemy==2.0.23
+sqlalchemy==2.0.36
 openpyxl==3.1.2
 python-dotenv==1.0.0
 gunicorn==21.2.0
 psycopg2-binary==2.9.9
-xhtml2pdf
-reportlab
-Pillow
+xhtml2pdf==0.2.17
+reportlab==4.1.0
