@@ -137,7 +137,7 @@
       <!-- Logo ou initiales -->
       <div class="logo-box">
         {% if tenant.logo_url %}
-        <img src="{{ tenant.logo_url }}" alt="{{ tenant.denomination }}"/>
+        <img src="{{ url_for('static',filename='uploads/logos/' + tenant.logo_url.split('/')[-1]) }}" alt="{{ tenant.denomination }}">
         {% else %}
         <div class="logo-box-text">{{ tenant.denomination[0] }}{{ tenant.denomination.split()[1][0] if tenant.denomination.split()|length > 1 else '' }}</div>
         {% endif %}

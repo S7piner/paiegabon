@@ -744,6 +744,21 @@ def bulletin_envoyer_email(id):
     import io
     import os
     from xhtml2pdf import pisa
+    from flask import current_app
+
+    # Corrige les chemins images/logo pour PDF local + Render
+    def link_callback(uri, rel):
+
+        if uri.startswith('/static'):
+            path = os.path.join(
+                current_app.root_path,
+                uri.lstrip('/')
+            )
+
+            if os.path.exists(path):
+                return path
+
+        return uri
 
     if current_user.is_super_admin:
         return redirect(url_for("admin_dashboard"))
@@ -801,42 +816,33 @@ def bulletin_envoyer_email(id):
             sender=app.config["MAIL_DEFAULT_SENDER"]
         )
 
-        # Gestion logo PDF
-        logo_pdf = ""
-
-        if t.logo_url:
-            logo_pdf = os.path.abspath("." + t.logo_url)
-
-        # Génération HTML
         html = render_template(
             "tenant/bulletin_print.html",
             bulletin=b,
-            tenant=t,
-            logo_pdf=logo_pdf
+            tenant=t
         )
 
-        print("TEMPLATE CHARGE OK")
-
-        # Création PDF
         pdf_buffer = io.BytesIO()
 
         result = pisa.CreatePDF(
             html,
-            dest=pdf_buffer
+            dest=pdf_buffer,
+            link_callback=link_callback
         )
 
-        print("PDF ERREUR =", result.err)
+        if result.err:
+            raise Exception(
+                "Erreur génération PDF"
+            )
 
         pdf = pdf_buffer.getvalue()
 
-        # Ajout pièce jointe
         msg.attach(
             f"bulletin_{b.id}.pdf",
             "application/pdf",
             pdf
         )
 
-        # Envoi mail
         mail.send(msg)
 
         flash(
@@ -846,7 +852,10 @@ def bulletin_envoyer_email(id):
 
     except Exception as e:
 
-        print("ERREUR COMPLETE :", str(e))
+        print(
+            "ERREUR COMPLETE :",
+            str(e)
+        )
 
         flash(
             f"Erreur envoi : {str(e)}",
@@ -854,7 +863,10 @@ def bulletin_envoyer_email(id):
         )
 
     return redirect(
-        url_for("bulletin_detail", id=id)
+        url_for(
+            "bulletin_detail",
+            id=id
+        )
     )
 
 @app.route("/bulletins/envoyer-tous", methods=["POST"])
