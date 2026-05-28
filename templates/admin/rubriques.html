@@ -1,42 +1,395 @@
-<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8"/><script src="https://cdn.tailwindcss.com"></script></head>
-<body class="bg-gray-50 min-h-screen">
-<nav class="bg-purple-900 text-white px-6 py-4 flex items-center gap-4 shadow-lg">
-  <a href="/admin" class="text-xl font-black">Ameriack I.T. Solutions</a>
-  <a href="/admin/rubriques" class="text-sm font-bold">Rubriques légales</a>
-  <a href="/logout" class="ml-auto bg-purple-700 px-3 py-1.5 rounded-lg text-xs font-bold">Déconnexion</a>
-</nav>
-<main class="max-w-5xl mx-auto p-8">
-  {% with messages = get_flashed_messages(with_categories=true) %}{% if messages %}{% for cat,msg in messages %}
-  <div class="mb-4 px-4 py-3 rounded-xl text-sm font-semibold bg-emerald-50 text-emerald-700">{{msg}}</div>
-  {% endfor %}{% endif %}{% endwith %}
-  <h1 class="text-2xl font-black mb-6">Rubriques de paie — Réglementation Gabon</h1>
-  <div class="bg-white rounded-2xl border border-gray-200 overflow-hidden mb-6">
-    <table class="w-full text-sm">
-      <thead><tr class="bg-purple-900 text-white text-xs uppercase">
-        <th class="px-4 py-3 text-left">Code</th><th class="px-4 py-3 text-left">Libellé</th>
-        <th class="px-4 py-3 text-center">Type</th><th class="px-4 py-3 text-center">Taux salarié</th>
-        <th class="px-4 py-3 text-center">Taux patronal</th><th class="px-4 py-3 text-right">Plafond</th>
-      </tr></thead>
-      <tbody>{% for r in rubriques %}
-      <tr class="border-b border-gray-50 hover:bg-gray-50">
-        <td class="px-4 py-3"><span class="bg-purple-900 text-white text-xs font-black px-2 py-0.5 rounded-md">{{r.code}}</span></td>
-        <td class="px-4 py-3 font-semibold">{{r.libelle}}</td>
-        <td class="px-4 py-3 text-center text-xs text-gray-500">{{r.type}}</td>
-        <td class="px-4 py-3 text-center font-bold text-red-600">{{'%.1f%%'|format(r.taux_salarie*100) if r.taux_salarie else '—'}}</td>
-        <td class="px-4 py-3 text-center font-bold text-blue-600">{{'%.1f%%'|format(r.taux_patronal*100) if r.taux_patronal else '—'}}</td>
-        <td class="px-4 py-3 text-right text-gray-500">{{r.plafond_mensuel|int|fcfa if r.plafond_mensuel else '—'}}</td>
-      </tr>{% endfor %}</tbody>
-    </table>
-  </div>
-  <div class="bg-emerald-50 border border-emerald-200 rounded-2xl p-4 text-sm text-emerald-700 font-semibold text-center">
-    ✅ Réglementation gabonaise en vigueur — CGI · Décret 578/PR · Arrêté 037/METPS
-  </div>
-</main><div style="position:fixed;bottom:1rem;right:1rem">
-  <form method="POST" action="/admin/update-taux">
-    <button type="submit" style="background:#059669;color:white;padding:.75rem 1.25rem;border-radius:.75rem;font-weight:700;font-size:.875rem;border:none;cursor:pointer;box-shadow:0 4px 12px rgba(0,0,0,.2)"
-      onclick="return confirm('Mettre à jour CNSS 5%/18%, FNH 3% dans la base de données ?')">
-      🔄 Mettre à jour les taux
-    </button>
-  </form>
+<!DOCTYPE html>
+<html lang="fr">
+
+<head>
+
+<meta charset="UTF-8"/>
+
+<meta name="viewport"
+      content="width=device-width, initial-scale=1.0"/>
+
+<title>Rubriques légales — Super Admin</title>
+
+<script src="https://cdn.tailwindcss.com"></script>
+
+<style>
+
+body{
+    font-family:'Segoe UI',sans-serif;
+}
+
+.sidebar-gradient{
+    background:linear-gradient(180deg,#0f172a 0%,#581c87 100%);
+}
+
+.table-row:hover{
+    background:#f8fafc;
+}
+
+</style>
+
+</head>
+
+<body class="bg-slate-100">
+
+<div class="flex min-h-screen">
+
+    <!-- SIDEBAR -->
+    <aside class="w-72 sidebar-gradient text-white flex flex-col">
+
+        <div class="p-8 border-b border-white/10">
+
+            <h1 class="text-3xl font-black leading-tight">
+                Ameriack I.T.<br>
+                Solutions
+            </h1>
+
+            <div class="mt-4">
+                <span class="bg-violet-500 px-4 py-1 rounded-full text-xs font-bold">
+                    SUPER ADMIN
+                </span>
+            </div>
+
+        </div>
+
+        <!-- MENU -->
+        <nav class="flex-1 p-5 space-y-3">
+
+            <a href="/admin"
+               class="flex items-center gap-4 px-5 py-4 rounded-2xl hover:bg-white/10 transition">
+
+                <span class="text-2xl">📊</span>
+                Dashboard
+
+            </a>
+
+            <a href="/admin/tenants"
+               class="flex items-center gap-4 px-5 py-4 rounded-2xl hover:bg-white/10 transition">
+
+                <span class="text-2xl">🏢</span>
+                Entreprises
+
+            </a>
+
+            <a href="/admin/plans"
+               class="flex items-center gap-4 px-5 py-4 rounded-2xl hover:bg-white/10 transition">
+
+                <span class="text-2xl">📦</span>
+                Plans
+
+            </a>
+
+            <a href="/admin/rubriques"
+               class="flex items-center gap-4 bg-white text-slate-900 px-5 py-4 rounded-2xl font-bold shadow">
+
+                <span class="text-2xl">📋</span>
+                Rubriques légales
+
+            </a>
+
+            <a href="/admin/paiements"
+               class="flex items-center gap-4 px-6 py-5 rounded-3xl bg-white/10 border border-white/20 font-bold">
+
+                <span class="text-3xl">💳</span>
+                Paiements
+
+            </a>
+
+            <a href="/parametres-paie"
+               class="flex items-center gap-4 px-5 py-4 rounded-2xl hover:bg-white/10 transition">
+
+                <span class="text-2xl">⚙️</span>
+                Paramètres paie
+
+            </a>
+
+        </nav>
+
+        <!-- FOOTER -->
+        <div class="p-5">
+
+            <a href="/logout"
+               class="bg-red-500 hover:bg-red-600 transition text-white w-full flex items-center justify-center gap-2 py-4 rounded-2xl font-bold">
+
+                🚪 Déconnexion
+
+            </a>
+
+        </div>
+
+    </aside>
+
+    <!-- MAIN -->
+    <main class="flex-1">
+
+        <!-- TOPBAR -->
+        <div class="bg-white px-10 py-6 shadow-sm flex items-center justify-between">
+
+            <div>
+
+                <h2 class="text-4xl font-black text-slate-900">
+                    Rubriques de paie
+                </h2>
+
+                <p class="text-slate-500 mt-1">
+                    Réglementation légale du Gabon
+                </p>
+
+            </div>
+
+            <div class="bg-violet-100 text-violet-700 px-5 py-3 rounded-2xl font-bold">
+                📋 {{rubriques|length}} rubriques
+            </div>
+
+        </div>
+
+        <!-- CONTENT -->
+        <div class="p-10">
+
+            <!-- KPIs -->
+            <div class="grid grid-cols-4 gap-5 mb-8">
+
+                <div class="bg-gradient-to-br from-violet-700 to-fuchsia-700 rounded-3xl p-6 text-white shadow-lg">
+
+                    <div class="text-4xl mb-4">
+                        📋
+                    </div>
+
+                    <div class="text-4xl font-black">
+                        {{rubriques|length}}
+                    </div>
+
+                    <div class="opacity-80 mt-2">
+                        Rubriques
+                    </div>
+
+                </div>
+
+                <div class="bg-gradient-to-br from-emerald-600 to-green-700 rounded-3xl p-6 text-white shadow-lg">
+
+                    <div class="text-4xl mb-4">
+                        ✅
+                    </div>
+
+                    <div class="text-4xl font-black">
+
+                        {{rubriques|selectattr("actif","equalto",True)|list|length}}
+
+                    </div>
+
+                    <div class="opacity-80 mt-2">
+                        Rubriques actives
+                    </div>
+
+                </div>
+
+                <div class="bg-gradient-to-br from-orange-500 to-red-500 rounded-3xl p-6 text-white shadow-lg">
+
+                    <div class="text-4xl mb-4">
+                        💼
+                    </div>
+
+                    <div class="text-4xl font-black">
+
+                        {{rubriques|selectattr("type","equalto","COTISATION")|list|length}}
+
+                    </div>
+
+                    <div class="opacity-80 mt-2">
+                        Cotisations
+                    </div>
+
+                </div>
+
+                <div class="bg-gradient-to-br from-blue-600 to-indigo-700 rounded-3xl p-6 text-white shadow-lg">
+
+                    <div class="text-4xl mb-4">
+                        ⚖️
+                    </div>
+
+                    <div class="text-4xl font-black">
+
+                        {{rubriques|selectattr("type","equalto","RETENUE")|list|length}}
+
+                    </div>
+
+                    <div class="opacity-80 mt-2">
+                        Retenues
+                    </div>
+
+                </div>
+
+            </div>
+
+            <!-- TABLE -->
+            <div class="bg-white rounded-3xl shadow-lg overflow-hidden border border-slate-200">
+
+                <div class="px-8 py-6 border-b border-slate-200 flex items-center justify-between">
+
+                    <h3 class="text-2xl font-black text-slate-900">
+                        Réglementation officielle
+                    </h3>
+
+                    <form method="POST"
+                          action="/admin/update-taux">
+
+                        <button
+                            type="submit"
+
+                            onclick="return confirm('Mettre à jour les taux légaux ?')"
+
+                            class="bg-gradient-to-r from-emerald-600 to-green-700 hover:opacity-90 transition text-white px-6 py-3 rounded-2xl font-bold shadow-lg">
+
+                            🔄 Mettre à jour les taux
+
+                        </button>
+
+                    </form>
+
+                </div>
+
+                <table class="w-full">
+
+                    <thead>
+
+                        <tr class="bg-slate-50 text-slate-500 text-sm uppercase">
+
+                            <th class="px-6 py-5 text-left">
+                                Code
+                            </th>
+
+                            <th class="px-6 py-5 text-left">
+                                Libellé
+                            </th>
+
+                            <th class="px-6 py-5 text-center">
+                                Type
+                            </th>
+
+                            <th class="px-6 py-5 text-center">
+                                Taux salarié
+                            </th>
+
+                            <th class="px-6 py-5 text-center">
+                                Taux patronal
+                            </th>
+
+                            <th class="px-6 py-5 text-right">
+                                Plafond
+                            </th>
+
+                        </tr>
+
+                    </thead>
+
+                    <tbody>
+
+                        {% for r in rubriques %}
+
+                        <tr class="border-b border-slate-100 table-row transition">
+
+                            <td class="px-6 py-5">
+
+                                <span class="bg-violet-100 text-violet-700 px-3 py-1 rounded-full text-xs font-black">
+
+                                    {{r.code}}
+
+                                </span>
+
+                            </td>
+
+                            <td class="px-6 py-5">
+
+                                <div class="font-bold text-slate-900">
+
+                                    {{r.libelle}}
+
+                                </div>
+
+                            </td>
+
+                            <td class="px-6 py-5 text-center">
+
+                                <span class="
+                                px-3 py-1 rounded-full text-xs font-bold
+
+                                {{'bg-emerald-100 text-emerald-700'
+                                if r.type=='COTISATION'
+                                else 'bg-orange-100 text-orange-700'}}
+                                ">
+
+                                {{r.type}}
+
+                                </span>
+
+                            </td>
+
+                            <td class="px-6 py-5 text-center font-black text-red-600">
+
+                                {{'%.1f%%'|format(r.taux_salarie*100)
+                                if r.taux_salarie else '—'}}
+
+                            </td>
+
+                            <td class="px-6 py-5 text-center font-black text-blue-600">
+
+                                {{'%.1f%%'|format(r.taux_patronal*100)
+                                if r.taux_patronal else '—'}}
+
+                            </td>
+
+                            <td class="px-6 py-5 text-right text-slate-600 font-semibold">
+
+                                {{r.plafond_mensuel|int|fcfa
+                                if r.plafond_mensuel else '—'}}
+
+                            </td>
+
+                        </tr>
+
+                        {% endfor %}
+
+                    </tbody>
+
+                </table>
+
+            </div>
+
+            <!-- INFO -->
+            <div class="mt-8 bg-emerald-50 border border-emerald-200 rounded-3xl p-6">
+
+                <div class="flex items-center gap-4">
+
+                    <div class="text-4xl">
+                        ✅
+                    </div>
+
+                    <div>
+
+                        <div class="font-black text-emerald-700 text-lg">
+
+                            Réglementation gabonaise en vigueur
+
+                        </div>
+
+                        <div class="text-emerald-600 text-sm mt-1">
+
+                            CGI · Décret 578/PR · Arrêté 037/METPS
+
+                        </div>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+        </div>
+
+    </main>
+
 </div>
-</body></html>
+
+</body>
+
+</html>

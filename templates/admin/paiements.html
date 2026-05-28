@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+
+<title>Paiements — Super Admin</title>
+
+<script src="https://cdn.tailwindcss.com"></script>
+
+<style>
+body{
+    font-family:'Segoe UI',sans-serif;
+}
+</style>
+
+</head>
+
+<body class="bg-gray-100">
+
+<div class="flex min-h-screen">
+
+    <!-- SIDEBAR -->
+    <aside class="w-72 bg-gradient-to-b from-slate-950 via-slate-900 to-purple-700 text-white flex flex-col">
+
+        <div class="p-8 border-b border-white/10">
+
+            <h1 class="text-4xl font-black leading-tight">
+                Ameriack I.T.<br>
+                Solutions
+            </h1>
+
+            <div class="mt-6">
+                <span class="bg-purple-600 px-5 py-2 rounded-full text-sm font-bold">
+                    SUPER ADMIN
+                </span>
+            </div>
+
+        </div>
+
+        <!-- MENU -->
+        <nav class="flex-1 p-5 space-y-4">
+
+            <a href="/admin"
+               class="flex items-center gap-4 px-6 py-5 rounded-3xl bg-white text-slate-900 font-bold shadow-lg">
+
+                <span class="text-3xl">📊</span>
+                Dashboard
+
+            </a>
+
+            <a href="/admin/tenants"
+               class="flex items-center gap-4 px-6 py-5 rounded-3xl hover:bg-white/10 transition-all">
+
+                <span class="text-3xl">🏢</span>
+                Entreprises
+
+            </a>
+
+            <a href="/admin/plans"
+               class="flex items-center gap-4 px-6 py-5 rounded-3xl hover:bg-white/10 transition-all">
+
+                <span class="text-3xl">📦</span>
+                Plans
+
+            </a>
+
+            <a href="/admin/rubriques"
+               class="flex items-center gap-4 px-6 py-5 rounded-3xl hover:bg-white/10 transition-all">
+
+                <span class="text-3xl">📋</span>
+                Rubriques
+
+            </a>
+
+            <a href="/admin/paiements"
+               class="flex items-center gap-4 px-6 py-5 rounded-3xl bg-white/10 border border-white/20 font-bold">
+
+                <span class="text-3xl">💳</span>
+                Paiements
+
+            </a>
+
+        </nav>
+
+        <!-- BOUTON -->
+        <div class="p-5">
+
+            <a href="/logout"
+               class="block w-full bg-red-500 hover:bg-red-600 text-center py-5 rounded-3xl text-xl font-black shadow-xl transition-all">
+
+               🚪 Déconnexion
+
+            </a>
+
+        </div>
+
+    </aside>
+
+    <!-- CONTENU -->
+    <main class="flex-1">
+
+        <!-- HEADER -->
+        <div class="bg-white px-10 py-8 flex items-center justify-between shadow-sm">
+
+            <div>
+
+                <h1 class="text-5xl font-black text-slate-900">
+                    Gestion des paiements
+                </h1>
+
+                <p class="text-gray-500 text-xl mt-2">
+                    Validation des abonnements entreprises
+                </p>
+
+            </div>
+
+            <div class="bg-purple-100 text-purple-700 px-8 py-4 rounded-2xl font-black text-xl">
+
+                👑 Administrateur principal
+
+            </div>
+
+        </div>
+
+        <!-- PAGE -->
+        <div class="p-10">
+
+            <!-- KPIs -->
+            <div class="grid grid-cols-3 gap-8 mb-10">
+
+                <!-- TOTAL -->
+                <div class="bg-gradient-to-br from-emerald-500 to-emerald-700 rounded-[2rem] p-8 text-white shadow-2xl">
+
+                    <div class="flex items-center justify-between">
+
+                        <div>
+
+                            <div class="text-5xl font-black">
+                                {{total|int}}
+                            </div>
+
+                            <div class="mt-2 text-lg opacity-90">
+                                Revenus total
+                            </div>
+
+                        </div>
+
+                        <div class="text-7xl">
+                            💰
+                        </div>
+
+                    </div>
+
+                </div>
+
+                <!-- EN ATTENTE -->
+                <div class="bg-gradient-to-br from-amber-500 to-orange-700 rounded-[2rem] p-8 text-white shadow-2xl">
+
+                    <div class="flex items-center justify-between">
+
+                        <div>
+
+                            <div class="text-5xl font-black">
+                                {{nb_attente}}
+                            </div>
+
+                            <div class="mt-2 text-lg opacity-90">
+                                Paiements attente
+                            </div>
+
+                        </div>
+
+                        <div class="text-7xl">
+                            ⏳
+                        </div>
+
+                    </div>
+
+                </div>
+
+                <!-- VALIDÉS -->
+                <div class="bg-gradient-to-br from-blue-600 to-cyan-600 rounded-[2rem] p-8 text-white shadow-2xl">
+
+                    <div class="flex items-center justify-between">
+
+                        <div>
+
+                            <div class="text-5xl font-black">
+                                {{nb_valides}}
+                            </div>
+
+                            <div class="mt-2 text-lg opacity-90">
+                                Paiements validés
+                            </div>
+
+                        </div>
+
+                        <div class="text-7xl">
+                            ✅
+                        </div>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+            <!-- TABLEAU -->
+            <div class="bg-white rounded-[2rem] shadow-xl overflow-hidden">
+
+                <div class="px-8 py-6 border-b border-gray-100 flex items-center justify-between">
+
+                    <div>
+
+                        <h2 class="text-3xl font-black text-slate-900">
+                            Liste des paiements
+                        </h2>
+
+                        <p class="text-gray-500 mt-1">
+                            Tous les paiements des entreprises
+                        </p>
+
+                    </div>
+
+                </div>
+
+                <table class="w-full">
+
+                    <thead>
+
+                        <tr class="bg-gray-50 text-gray-500 uppercase text-sm">
+
+                            <th class="px-8 py-5 text-left">
+                                Entreprise
+                            </th>
+
+                            <th class="px-8 py-5 text-center">
+                                Montant
+                            </th>
+
+                            <th class="px-8 py-5 text-center">
+                                Référence
+                            </th>
+
+                            <th class="px-8 py-5 text-center">
+                                Mode
+                            </th>
+
+                            <th class="px-8 py-5 text-center">
+                                Statut
+                            </th>
+
+                            <th class="px-8 py-5 text-center">
+                                Date
+                            </th>
+
+                            <th class="px-8 py-5 text-center">
+                                Actions
+                            </th>
+
+                        </tr>
+
+                    </thead>
+
+                    <tbody>
+
+                    {% for p in paiements %}
+
+                    <tr class="border-b border-gray-100 hover:bg-gray-50 transition-all">
+
+                        <td class="px-8 py-6">
+
+                            <div class="font-black text-slate-900 text-lg">
+                                {{p.tenant.denomination}}
+                            </div>
+
+                        </td>
+
+                        <td class="px-8 py-6 text-center font-black text-emerald-600 text-lg">
+
+                            {{p.montant|int}} FCFA
+
+                        </td>
+
+                        <td class="px-8 py-6 text-center font-semibold">
+
+                            {{p.reference}}
+
+                        </td>
+
+                        <td class="px-8 py-6 text-center">
+
+                            {{p.mode}}
+
+                        </td>
+
+                        <td class="px-8 py-6 text-center">
+
+                            <span class="px-4 py-2 rounded-full text-sm font-black
+
+                            {% if p.statut == 'VALIDÉ' %}
+                            bg-emerald-100 text-emerald-700
+                            {% else %}
+                            bg-amber-100 text-amber-700
+                            {% endif %}
+                            ">
+
+                            {{p.statut}}
+
+                            </span>
+
+                        </td>
+
+                        <td class="px-8 py-6 text-center text-gray-500">
+
+                            {{p.date_creation.strftime('%d/%m/%Y')}}
+
+                        </td>
+
+
+                        <td class="px-8 py-6 text-center">
+
+                            {% if p.statut != "VALIDÉ" %}
+
+                            <a href="/admin/paiements/{{p.id}}/valider"
+                            class="bg-emerald-500 hover:bg-emerald-600 text-white px-4 py-2 rounded-xl text-xs font-bold">
+
+                            ✅ Valider
+
+                            </a>
+
+                            {% else %}
+
+                            <span class="text-emerald-600 font-black">
+                                Déjà validé
+                            </span>
+
+                            {% endif %}
+
+                        </td>
+
+                    </tr>
+
+                    {% endfor %}
+
+                    </tbody>
+
+                </table>
+
+            </div>
+
+        </div>
+
+    </main>
+
+</div>
+
+</body>
+</html>

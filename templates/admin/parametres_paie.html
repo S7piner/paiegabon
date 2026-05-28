@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8"/>
+<script src="https://cdn.tailwindcss.com"></script>
+</head>
+
+<body class="bg-gray-50 min-h-screen">
+
+<nav class="bg-purple-900 text-white px-6 py-4 flex items-center gap-4 shadow-lg">
+
+<a href="/admin"
+class="text-xl font-black">
+
+Ameriack I.T. Solutions
+
+</a>
+
+<a href="/admin/rubriques"
+class="text-sm font-bold">
+
+Rubriques légales
+
+</a>
+
+<a href="/logout"
+class="ml-auto bg-purple-700 px-3 py-1.5 rounded-lg text-xs font-bold">
+
+Déconnexion
+
+</a>
+
+</nav>
+
+<main class="max-w-5xl mx-auto p-8">
+
+{% with messages=get_flashed_messages(with_categories=true) %}
+{% if messages %}
+{% for cat,msg in messages %}
+
+<div class="mb-4 px-4 py-3 rounded-xl text-sm font-semibold bg-emerald-50 text-emerald-700">
+
+{{msg}}
+
+</div>
+
+{% endfor %}
+{% endif %}
+{% endwith %}
+
+<h1 class="text-2xl font-black mb-6">
+
+Paramètres réglementaires — Gabon
+
+</h1>
+
+<form method="POST">
+
+<div class="bg-white rounded-2xl border border-gray-200 overflow-hidden">
+
+<table class="w-full text-sm">
+
+<thead>
+
+<tr class="bg-purple-900 text-white text-xs uppercase">
+
+<th class="px-4 py-3 text-left">
+
+Libellé
+
+</th>
+
+<th class="px-4 py-3 text-center">
+
+Valeur
+
+</th>
+
+</tr>
+
+</thead>
+
+<tbody>
+
+{% for p in params %}
+
+<tr class="border-b border-gray-100">
+
+<td class="px-4 py-4 font-semibold">
+
+{{p.libelle}}
+
+</td>
+
+<td class="px-4 py-4 text-center">
+
+<input
+type="number"
+step="0.0001"
+name="param_{{p.id}}"
+value="{{p.valeur}}"
+
+class="
+w-32
+text-center
+border
+border-gray-300
+rounded-lg
+px-3
+py-2
+font-bold
+">
+
+</td>
+
+</tr>
+
+{% endfor %}
+
+</tbody>
+
+</table>
+
+</div>
+
+<div
+style="
+position:fixed;
+bottom:1rem;
+right:1rem;
+">
+
+<button
+type="submit"
+
+style="
+background:#059669;
+color:white;
+padding:.75rem 1.25rem;
+border-radius:.75rem;
+font-weight:700;
+font-size:.875rem;
+border:none;
+cursor:pointer;
+box-shadow:0 4px 12px rgba(0,0,0,.2);
+">
+
+💾 Enregistrer les paramètres
+
+</button>
+
+</div>
+
+</form>
+
+</main>
+
+</body>
+</html>

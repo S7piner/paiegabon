@@ -2,6 +2,7 @@
 calculs_paie.py — Moteur de calcul de la paie selon la réglementation gabonaise
 Références : CGI Gabon, Décret 578/PR/MDSFPSSN, Arrêté 037/METPS
 """
+from models import ParametrePaie
 
 # ─── CONSTANTES RÉGLEMENTAIRES (Gabon 2026) ───────────────────────────────────
 CNSS_TAUX_SALARIE    = 0.05        # 5%
@@ -38,6 +39,17 @@ BAREME_IRPP = [
     (916_668,  float("inf"), 0.35),# 35%
 ]
 
+
+def get_parametre(code, valeur_defaut=0):
+
+    p = ParametrePaie.query.filter_by(
+        code=code,
+        actif=True
+    ).first()
+
+    return float(
+        p.valeur
+    ) if p else valeur_defaut
 
 def calculer_irpp(base_imposable: float, nb_parts: float) -> float:
     """Calcul de l'IRPP par quotient familial (barème progressif).
@@ -81,7 +93,7 @@ def calculer_bulletin(donnees: dict, nb_parts: float = 1.0) -> dict:
         salaire_base, heures_sup_10, heures_sup_30, heures_sup_40, heures_sup_70,
         absences, sursalaire, prime_caisse, carburant, prime_anciennete,
         indem_logement, indem_domesticite, indem_eau_electricite, indem_nourriture,
-        prime_rendement, prime_assiduité, prime_qualite, prime_performance,
+        prime_rendement, prime_assiduite, prime_qualite, prime_performance,
         prime_transport, prime_responsabilite, allocations_conge,
         prime_panier, indem_transport, indem_representation, prime_salisure,
         acompte
@@ -104,7 +116,7 @@ def calculer_bulletin(donnees: dict, nb_parts: float = 1.0) -> dict:
     carburant         = g("carburant")
     prime_anciennete  = g("prime_anciennete")
     prime_rendement   = g("prime_rendement")
-    prime_assiduité   = g("prime_assiduité")
+    prime_assiduite   = g("prime_assiduite")
     prime_qualite     = g("prime_qualite")
     prime_performance = g("prime_performance")
     prime_transport   = g("prime_transport")
@@ -132,55 +144,164 @@ def calculer_bulletin(donnees: dict, nb_parts: float = 1.0) -> dict:
         + sursalaire
         + prime_caisse + carburant + prime_anciennete
         + indem_logement + indem_domesticite + indem_eau_electricite + indem_nourriture
-        + prime_rendement + prime_assiduité + prime_qualite + prime_performance
+        + prime_rendement + prime_assiduite + prime_qualite + prime_performance
         + prime_transport + prime_responsabilite
         + allocations_conge
     )
 
     # ── 3. CNSS ─────────────────────────────────────────────────────────────
-    # Transport exonéré CNSS à hauteur de 35 000 FCFA
-    transport_exo_cnss = min(prime_transport, TRANSPORT_EXONERATION_CNSS)
-    base_cnss = min(salaire_brut - transport_exo_cnss, CNSS_PLAFOND)
-    base_cnss = max(base_cnss, 0)
-    cnss_salarie   = round(base_cnss * CNSS_TAUX_SALARIE, 2)
-    cnss_patronale = round(base_cnss * CNSS_TAUX_PATRONAL, 2)
 
-    # ── 4. CNAMGS ───────────────────────────────────────────────────────────
-    # Transport exonéré CNAMGS à 100 000 FCFA
-    transport_exo_cnamgs = min(prime_transport, TRANSPORT_EXONERATION_IRPP)
-    # Logement plafonné pour CNAMGS
-    logement_imposable = min(indem_logement, salaire_brut * LOGEMENT_PLAFOND_PCT, LOGEMENT_PLAFOND_MAX)
+    cnss_sal_taux = get_parametre(
+        "CNSS_SALARIE",
+        0.05
+    )
+
+    cnss_pat_taux = get_parametre(
+        "CNSS_PATRONAL",
+        0.18
+    )
+
+    transport_exo_cnss = min(
+        prime_transport,
+        TRANSPORT_EXONERATION_CNSS
+    )
+
+    base_cnss = min(
+        salaire_brut - transport_exo_cnss,
+        CNSS_PLAFOND
+    )
+
+    base_cnss = max(
+        base_cnss,
+        0
+    )
+
+    cnss_salarie = round(
+        base_cnss * cnss_sal_taux,
+        2
+    )
+
+    cnss_patronale = round(
+        base_cnss * cnss_pat_taux,
+        2
+    )
+
+
+    # ── 4. CNAMGS ─────────────────────────────────────────────────────
+
+    transport_exo_cnamgs = min(
+        prime_transport,
+        TRANSPORT_EXONERATION_IRPP
+    )
+
+    logement_imposable = min(
+        indem_logement,
+        salaire_brut * LOGEMENT_PLAFOND_PCT,
+        LOGEMENT_PLAFOND_MAX
+    )
+
     base_cnamgs = min(
-        salaire_brut - transport_exo_cnamgs - indem_logement + logement_imposable,
+        salaire_brut
+        - transport_exo_cnamgs
+        - indem_logement
+        + logement_imposable,
         CNAMGS_PLAFOND
     )
-    base_cnamgs = max(base_cnamgs, 0)
-    cnamgs_salarie   = round(base_cnamgs * CNAMGS_TAUX_SALARIE, 2)
-    cnamgs_patronale = round(base_cnamgs * CNAMGS_TAUX_PATRONAL, 2)
 
-    # ── 5. FNH ──────────────────────────────────────────────────────────────
-    # Base FNH = Base CNSS - indemnité de logement (plafonnée à FNH_PLAFOND)
-    base_fnh = min(max(base_cnss - indem_logement, 0), FNH_PLAFOND)
-    fnh = round(base_fnh * FNH_TAUX, 2)
+    base_cnamgs = max(
+        base_cnamgs,
+        0
+    )
 
-    # ── 6. CFP ──────────────────────────────────────────────────────────────
-    # Base CFP = Base CNSS - indemnité de logement (même base que FNH)
-    base_cfp = max(base_cnss - indem_logement, 0)
-    cfp = round(base_cfp * CFP_TAUX, 2)
+    cnamgs_sal_taux = get_parametre(
+        "CNAMGS_SALARIE",
+        0.02
+    )
 
-    # ── 7. TCS ──────────────────────────────────────────────────────────────
-    # Art. 347 CGI : Base TCS = Brut - cotisations salariales + avantages nature
-    # EXCLUSIONS : indemnité de logement, prime rendement, prime performance
+    cnamgs_pat_taux = get_parametre(
+        "CNAMGS_PATRONAL",
+        0.041
+    )
+
+    cnamgs_salarie = round(
+        base_cnamgs * cnamgs_sal_taux,
+        2
+    )
+
+    cnamgs_patronale = round(
+        base_cnamgs * cnamgs_pat_taux,
+        2
+    )
+
+
+    # ── 5. FNH ────────────────────────────────────────────────────────
+
+    base_fnh = min(
+        max(
+            base_cnss - indem_logement,
+            0
+        ),
+        FNH_PLAFOND
+    )
+
+    fnh = round(
+        base_fnh *
+        get_parametre(
+            "FNH",
+            0.03
+        ),
+        2
+    )
+
+
+    # ── 6. CFP ────────────────────────────────────────────────────────
+
+    base_cfp = max(
+        base_cnss - indem_logement,
+        0
+    )
+
+    cfp = round(
+        base_cfp *
+        get_parametre(
+            "CFP",
+            0.005
+        ),
+        2
+    )
+
+
+    # ── 7. TCS ────────────────────────────────────────────────────────
+
     base_tcs = (
         base_cnamgs
         - cnss_salarie
         - cnamgs_salarie
-        + (indem_domesticite + indem_eau_electricite + indem_nourriture)
-        - indem_logement          # ← EXCLU de la base TCS
-        - (prime_rendement + prime_performance)
+        + (
+            indem_domesticite
+            + indem_eau_electricite
+            + indem_nourriture
+        )
+        - indem_logement
+        - (
+            prime_rendement
+            + prime_performance
+        )
     )
-    base_tcs_imposable = max(base_tcs - TCS_EXONERATION, 0)
-    tcs = round(base_tcs_imposable * TCS_TAUX, 2)
+
+    base_tcs_imposable = max(
+        base_tcs - TCS_EXONERATION,
+        0
+    )
+
+    tcs = round(
+        base_tcs_imposable *
+        get_parametre(
+            "TCS",
+            0.05
+        ),
+        2
+    )
 
     # ── 8. NET AVANT IRPP ───────────────────────────────────────────────────
     net_avant_irpp = salaire_brut - cnss_salarie - cnamgs_salarie - tcs
@@ -219,7 +340,7 @@ def calculer_bulletin(donnees: dict, nb_parts: float = 1.0) -> dict:
         "indem_eau_electricite": round(indem_eau_electricite, 2),
         "indem_nourriture":      round(indem_nourriture, 2),
         "prime_rendement":       round(prime_rendement, 2),
-        "prime_assiduité":       round(prime_assiduité, 2),
+        "prime_assiduite":       round(prime_assiduite, 2),
         "prime_qualite":         round(prime_qualite, 2),
         "prime_performance":     round(prime_performance, 2),
         "prime_transport":       round(prime_transport, 2),

@@ -72,19 +72,159 @@
       </select>
     </div>
 
-    {% if action == 'nouveau' %}
+    <!-- Emploi -->
+<div class="card p-6 space-y-4">
+
+    <h2 class="text-xs font-bold text-gray-400 uppercase tracking-widest">
+        Emploi & Contrat
+    </h2>
+
     <div>
-      <label class="block text-xs font-bold text-gray-500 mb-1.5">Salaire de base (FCFA) *</label>
-      <input type="number" name="salaire_base" required min="0"
-        class="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-right font-mono"/>
+        <label class="block text-xs font-bold text-gray-500 mb-1.5">
+            Poste / Emploi *
+        </label>
+
+        <input
+            type="text"
+            name="emploi"
+            required
+            value="{{ salarie.emploi if salarie else '' }}"
+            class="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm"
+        >
     </div>
+
     <div>
-      <label class="block text-xs font-bold text-gray-500 mb-1.5">Type de contrat</label>
-      <select name="type_contrat" class="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm">
-        <option>CDI</option><option>CDD</option><option>STAGE</option>
-      </select>
+        <label class="block text-xs font-bold text-gray-500 mb-1.5">
+            Catégorie
+        </label>
+
+        <select
+            name="categorie_id"
+            class="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm"
+        >
+
+            <option value="">
+                — Non définie —
+            </option>
+
+            {% for cat in categories %}
+            <option
+                value="{{ cat.id }}"
+                {% if salarie and salarie.categorie_id==cat.id %}
+                selected
+                {% endif %}
+            >
+                {{ cat.code }} — {{ cat.libelle }}
+            </option>
+            {% endfor %}
+
+        </select>
     </div>
+
+    <!-- SALAIRE -->
+    <div>
+
+        <label class="block text-xs font-bold text-gray-500 mb-1.5">
+            Salaire de base (FCFA)
+        </label>
+
+        <input
+            type="number"
+            name="salaire_base"
+            min="0"
+            required
+            value="{{ contrat.salaire_base|int if contrat else '' }}"
+            class="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-right font-mono"
+        >
+
+    </div>
+
+    <!-- TYPE CONTRAT -->
+    <div>
+
+        <label class="block text-xs font-bold text-gray-500 mb-1.5">
+            Type de contrat
+        </label>
+
+        <select
+            name="type_contrat"
+            class="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm"
+        >
+
+            <option value="CDI"
+            {% if contrat and contrat.type_contrat=="CDI" %}
+            selected
+            {% endif %}
+            >
+            CDI
+            </option>
+
+            <option value="CDD"
+            {% if contrat and contrat.type_contrat=="CDD" %}
+            selected
+            {% endif %}
+            >
+            CDD
+            </option>
+
+            <option value="STAGE"
+            {% if contrat and contrat.type_contrat=="STAGE" %}
+            selected
+            {% endif %}
+            >
+            STAGE
+            </option>
+
+        </select>
+
+    </div>
+
+    <div>
+
+        <label class="block text-xs font-bold text-gray-500 mb-1.5">
+            Date d'embauche *
+        </label>
+
+        <input
+            type="date"
+            name="date_embauche"
+            required
+            value="{{ salarie.date_embauche|string if salarie and salarie.date_embauche else '' }}"
+            class="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm"
+        >
+
+    </div>
+
+    {% if action == 'modifier' %}
+
+    <div>
+
+        <label class="block text-xs font-bold text-gray-500 mb-1.5">
+            Statut
+        </label>
+
+        <select
+            name="statut"
+            class="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm"
+        >
+
+            {% for st in ['ACTIF','INACTIF','SUSPENDU'] %}
+            <option
+            {% if salarie and salarie.statut==st %}
+            selected
+            {% endif %}
+            >
+            {{ st }}
+            </option>
+            {% endfor %}
+
+        </select>
+
+    </div>
+
     {% endif %}
+
+</div>
 
     <div>
       <label class="block text-xs font-bold text-gray-500 mb-1.5">Date d'embauche *</label>

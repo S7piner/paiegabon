@@ -268,7 +268,7 @@ class BulletinPaie(db.Model):
     indem_eau_electricite = db.Column(db.Numeric(15,2), default=0)
     indem_nourriture      = db.Column(db.Numeric(15,2), default=0)
     prime_rendement       = db.Column(db.Numeric(15,2), default=0)
-    prime_assiduité       = db.Column(db.Numeric(15,2), default=0)
+    prime_assiduite       = db.Column(db.Numeric(15,2), default=0)
     prime_qualite         = db.Column(db.Numeric(15,2), default=0)
     prime_performance     = db.Column(db.Numeric(15,2), default=0)
     prime_transport       = db.Column(db.Numeric(15,2), default=0)
@@ -332,6 +332,47 @@ class RubriquePaie(db.Model):
         for k in ["taux_salarie","taux_patronal","plafond_mensuel"]:
             if d[k] is not None: d[k] = float(d[k])
         return d
+
+
+
+class ParametrePaie(db.Model):
+    __tablename__ = "parametres_paie"
+
+    id = db.Column(
+        db.Integer,
+        primary_key=True
+    )
+
+    code = db.Column(
+        db.String(50),
+        unique=True,
+        nullable=False
+    )
+
+    libelle = db.Column(
+        db.String(100),
+        nullable=False
+    )
+
+    valeur = db.Column(
+        db.Numeric(10,4),
+        nullable=False
+    )
+
+    actif = db.Column(
+        db.Boolean,
+        default=True
+    )
+
+    def to_dict(self):
+
+        return {
+            "id": self.id,
+            "code": self.code,
+            "libelle": self.libelle,
+            "valeur": float(self.valeur)
+        }
+
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -486,3 +527,179 @@ class FeuillePaieJournalier(db.Model):
         for k in ["total_heures","taux_horaire","montant_brut"]:
             if d[k] is not None: d[k] = float(d[k])
         return d
+
+
+
+
+class AuditLog(db.Model):
+
+    __tablename__ = "audit_logs"
+
+    id = db.Column(
+        db.Integer,
+        primary_key=True
+    )
+
+    tenant_id = db.Column(
+        db.Integer,
+        db.ForeignKey("tenants.id"),
+        nullable=True
+    )
+
+    utilisateur_id = db.Column(
+        db.Integer,
+        db.ForeignKey("utilisateurs.id"),
+        nullable=True
+    )
+
+    action = db.Column(
+        db.String(100),
+        nullable=False
+    )
+
+    details = db.Column(
+        db.Text
+    )
+
+    date_creation = db.Column(
+        db.DateTime,
+        default=datetime.utcnow
+    )
+
+    utilisateur = db.relationship(
+        "Utilisateur",
+        backref="audit_logs"
+    )
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "tenant_id": self.tenant_id,
+            "utilisateur_id": self.utilisateur_id,
+            "action": self.action,
+            "details": self.details,
+            "date_creation": str(self.date_creation)
+        }
+
+        
+
+# ─────────────────────────────────────────────────────────────
+# PAIEMENTS ABONNEMENTS
+# ─────────────────────────────────────────────────────────────
+
+class Paiement(db.Model):
+
+    __tablename__ = "paiements"
+
+    id = db.Column(
+        db.Integer,
+        primary_key=True
+    )
+
+    tenant_id = db.Column(
+        db.Integer,
+        db.ForeignKey("tenants.id"),
+        nullable=False
+    )
+
+    plan_id = db.Column(
+        db.Integer,
+        db.ForeignKey("plans.id"),
+        nullable=False
+    )
+
+    montant = db.Column(
+        db.Numeric(15,2),
+        nullable=False
+    )
+
+    mode = db.Column(
+        db.String(50)
+    )
+
+    operateur = db.Column(
+        db.String(50)
+    )
+
+    reference = db.Column(
+        db.String(120),
+        unique=True
+    )
+
+    telephone = db.Column(
+        db.String(30)
+    )
+
+    duree_mois = db.Column(
+        db.Integer,
+        default=1
+    )
+
+    statut = db.Column(
+        db.String(20),
+        default="EN_ATTENTE"
+    )
+
+    date_creation = db.Column(
+        db.DateTime,
+        default=datetime.utcnow
+    )
+
+    date_validation = db.Column(
+        db.DateTime
+    )
+
+    date_expiration = db.Column(
+        db.DateTime
+    )
+
+    # Relations
+    tenant = db.relationship(
+        "Tenant",
+        backref="paiements"
+    )
+
+    plan = db.relationship(
+        "Plan"
+    )
+
+    def to_dict(self):
+
+        return {
+
+            "id": self.id,
+
+            "tenant_id": self.tenant_id,
+
+            "plan_id": self.plan_id,
+
+            "montant": float(self.montant),
+
+            "mode": self.mode,
+
+            "operateur": self.operateur,
+
+            "reference": self.reference,
+
+            "telephone": self.telephone,
+
+            "duree_mois": self.duree_mois,
+
+            "statut": self.statut,
+
+            "date_creation": (
+                self.date_creation.isoformat()
+                if self.date_creation else None
+            ),
+
+            "date_validation": (
+                self.date_validation.isoformat()
+                if self.date_validation else None
+            ),
+
+            "date_expiration": (
+                self.date_expiration.isoformat()
+                if self.date_expiration else None
+            )
+
+        }

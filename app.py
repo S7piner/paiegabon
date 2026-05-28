@@ -7,11 +7,12 @@ import tempfile
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 from datetime import datetime, date, timedelta
 from functools import wraps
+from decimal import Decimal, InvalidOperation
 import io, os, secrets as sec
 
-from models import (db, Plan, Tenant, Utilisateur, CategorieEmploi, Salarie,
+from models import (AuditLog, db, Plan, Tenant, Utilisateur, CategorieEmploi, Salarie,
                     Contrat, PeriodePaie, BulletinPaie, RubriquePaie, Conge,
-                    Acompte, Journalier, Pointage, FeuillePaieJournalier)
+                    Acompte, Journalier, Pointage, FeuillePaieJournalier, AuditLog, ParametrePaie, Paiement)
 from calculs_paie import calculer_bulletin, calculer_masse_salariale
 from flask_mail import Mail, Message
 
@@ -84,9 +85,39 @@ def can_edit(f):
         return f(*a,**k)
     return d
 
+def montant_valide(valeur, nom="Montant"):
+    try:
+        return Decimal(str(valeur).replace(",", "."))
+    except (InvalidOperation, ValueError):
+        raise ValueError(f"{nom} invalide")
+
+
 def get_tenant():
-    if current_user.is_super_admin: return None
+    if current_user.is_super_admin:
+        return None
+
     return current_user.tenant
+
+
+def creer_audit(
+    action,
+    details=""
+):
+
+    t = get_tenant()
+
+    audit = AuditLog(
+        tenant_id=t.id if t else None,
+        utilisateur_id=current_user.id if current_user.is_authenticated else None,
+        action=action,
+        details=details
+    )
+
+    db.session.add(audit)
+    db.session.commit()
+
+
+
 
 # ── Auth ──────────────────────────────────────────────────────────────────────
 @app.route("/")
@@ -110,40 +141,210 @@ def login():
         flash("Email ou mot de passe incorrect.","error")
     return render_template("auth/login.html")
 
-@app.route("/inscription", methods=["GET","POST"])
+@app.route("/inscription", methods=["GET", "POST"])
 def inscription():
+
     plans = Plan.query.filter_by(actif=True).all()
+
     if request.method == "POST":
-        email = request.form.get("email","").strip().lower()
+
+        email = request.form.get(
+            "email",
+            ""
+        ).strip().lower()
+
+        # Vérification email
         if Utilisateur.query.filter_by(email=email).first():
-            flash("Email déjà utilisé.","error")
-            return render_template("auth/inscription.html", plans=plans)
-        plan = Plan.query.get(request.form.get("plan_id","")) or Plan.query.filter_by(code="STARTER").first()
-        denom = request.form.get("denomination","").strip()
-        slug_base = denom.lower().replace(" ","_")[:30]
-        slug = slug_base; i=1
-        while Tenant.query.filter_by(slug=slug).first(): slug=f"{slug_base}_{i}"; i+=1
-        t = Tenant(slug=slug, denomination=denom.upper(),
-                   sigle=request.form.get("sigle","").strip().upper(),
-                   activite=request.form.get("activite","").strip(),
-                   nif=request.form.get("nif","").strip(),
-                   telephone=request.form.get("telephone","").strip(),
-                   ville=request.form.get("ville","Libreville"),
-                   pays="Gabon", plan_id=plan.id if plan else None,
-                   statut="ESSAI", date_expiration=datetime.utcnow()+timedelta(days=30))
+
+            flash(
+                "Email déjà utilisé.",
+                "error"
+            )
+
+            return render_template(
+                "auth/inscription.html",
+                plans=plans
+            )
+
+        # Plan choisi
+        plan = Plan.query.get(
+            request.form.get(
+                "plan_id",
+                ""
+            )
+        ) or Plan.query.filter_by(
+            code="STARTER"
+        ).first()
+
+        # Nom entreprise
+        denom = request.form.get(
+            "denomination",
+            ""
+        ).strip()
+
+        # Génération slug unique
+        slug_base = denom.lower().replace(
+            " ",
+            "_"
+        )[:30]
+
+        slug = slug_base
+        i = 1
+
+        while Tenant.query.filter_by(slug=slug).first():
+
+            slug = f"{slug_base}_{i}"
+            i += 1
+
+        # Création entreprise
+        t = Tenant(
+
+            slug=slug,
+
+            denomination=denom.upper(),
+
+            sigle=request.form.get(
+                "sigle",
+                ""
+            ).strip().upper(),
+
+            activite=request.form.get(
+                "activite",
+                ""
+            ).strip(),
+
+            nif=request.form.get(
+                "nif",
+                ""
+            ).strip(),
+
+            telephone=request.form.get(
+                "telephone",
+                ""
+            ).strip(),
+
+            ville=request.form.get(
+                "ville",
+                "Libreville"
+            ),
+
+            pays="Gabon",
+
+            plan_id=plan.id if plan else None,
+
+            statut="ESSAI",
+
+            date_expiration=datetime.utcnow() + timedelta(days=30)
+
+        )
+
+        # Token API
         t.token_api = sec.token_hex(32)
-        db.session.add(t); db.session.flush()
-        for code,lib in [("C1","Ouvriers"),("C2","Techniciens"),("C3","Conducteurs de Travaux"),("C4","Cadres")]:
-            db.session.add(CategorieEmploi(tenant_id=t.id,code=code,libelle=lib))
-        admin = Utilisateur(nom=request.form.get("nom","").strip().upper(),
-                            prenom=request.form.get("prenom","").strip(),
-                            email=email, role="TENANT_ADMIN", tenant_id=t.id, actif=True)
-        admin.set_password(request.form.get("password",""))
-        db.session.add(admin); db.session.commit()
-        flash("Bienvenue ! Essai gratuit de 30 jours activé.","success")
+
+        db.session.add(t)
+
+        # Génère ID entreprise
+        db.session.flush()
+
+        # Catégories par défaut
+        for code, lib in [
+
+            ("C1", "Ouvriers"),
+
+            ("C2", "Techniciens"),
+
+            ("C3", "Conducteurs de Travaux"),
+
+            ("C4", "Cadres")
+
+        ]:
+
+            db.session.add(
+
+                CategorieEmploi(
+
+                    tenant_id=t.id,
+
+                    code=code,
+
+                    libelle=lib
+
+                )
+
+            )
+
+        # Création administrateur entreprise
+        admin = Utilisateur(
+
+            nom=request.form.get(
+                "nom",
+                ""
+            ).strip().upper(),
+
+            prenom=request.form.get(
+                "prenom",
+                ""
+            ).strip(),
+
+            email=email,
+
+            role="TENANT_ADMIN",
+
+            tenant_id=t.id,
+
+            actif=True
+
+        )
+
+        admin.set_password(
+
+            request.form.get(
+                "password",
+                ""
+            )
+
+        )
+
+        db.session.add(admin)
+
+        # Création paiement automatique essai
+        paiement = Paiement(
+
+            tenant_id=t.id,
+
+            plan_id=plan.id if plan else None,
+
+            montant=plan.prix_mensuel if plan else 0,
+
+            reference=f"ESSAI-{t.id}",
+
+            mode="ESSAI GRATUIT",
+
+            statut="EN ATTENTE"
+
+        )
+
+        db.session.add(paiement)
+
+        # Sauvegarde finale
+        db.session.commit()
+
+        flash(
+            "Bienvenue ! Essai gratuit de 30 jours activé.",
+            "success"
+        )
+
+        # Connexion auto
         login_user(admin)
-        return redirect(url_for("dashboard"))
-    return render_template("auth/inscription.html", plans=plans)
+
+        return redirect(
+            url_for("dashboard")
+        )
+
+    return render_template(
+        "auth/inscription.html",
+        plans=plans
+    )
 
 @app.route("/logout")
 @login_required
@@ -154,24 +355,98 @@ def logout():
 @app.route("/admin")
 @super_admin_required
 def admin_dashboard():
-    tenants   = Tenant.query.order_by(Tenant.date_inscription.desc()).all()
-    total_sal = db.session.query(db.func.count(Salarie.id)).scalar() or 0
-    total_bul = db.session.query(db.func.count(BulletinPaie.id)).scalar() or 0
-    revenus   = sum((float(t.plan.prix_mensuel) if t.plan else 0) for t in tenants if t.statut=="ACTIF")
-    return render_template("admin/dashboard.html",
-        tenants=tenants, nb_actifs=sum(1 for t in tenants if t.statut=="ACTIF"),
-        nb_essai=sum(1 for t in tenants if t.statut=="ESSAI"),
-        total_sal=total_sal, total_bul=total_bul, revenus=revenus)
+
+    tenants = Tenant.query.order_by(
+        Tenant.date_inscription.desc()
+    ).all()
+
+    total_sal = db.session.query(
+        db.func.count(Salarie.id)
+    ).scalar() or 0
+
+    total_bul = db.session.query(
+        db.func.count(BulletinPaie.id)
+    ).scalar() or 0
+
+    revenus = sum(
+        (
+            float(t.plan.prix_mensuel)
+            if t.plan else 0
+        )
+        for t in tenants
+        if t.statut == "ACTIF"
+    )
+
+    nb_tenants = len(tenants)
+
+    return render_template(
+        "admin/dashboard.html",
+
+        tenants=tenants,
+
+        nb_tenants=nb_tenants,
+
+        nb_actifs=sum(
+            1 for t in tenants
+            if t.statut == "ACTIF"
+        ),
+
+        nb_essai=sum(
+            1 for t in tenants
+            if t.statut == "ESSAI"
+        ),
+
+        total_sal=total_sal,
+        total_bul=total_bul,
+        revenus=revenus
+    )
 
 @app.route("/admin/tenants")
 @super_admin_required
 def admin_tenants():
-    q=request.args.get("q",""); statut=request.args.get("statut","")
-    query=Tenant.query
-    if q: query=query.filter(Tenant.denomination.ilike(f"%{q}%"))
-    if statut: query=query.filter_by(statut=statut)
-    return render_template("admin/tenants.html", tenants=query.order_by(Tenant.date_inscription.desc()).all(),
-        plans=Plan.query.all(), q=q, statut=statut)
+
+    q = request.args.get("q", "").strip()
+
+    statut = request.args.get("statut", "")
+
+    query = Tenant.query
+
+    if q:
+
+        query = query.filter(
+            Tenant.denomination.ilike(f"%{q}%")
+        )
+
+    if statut:
+
+        query = query.filter_by(
+            statut=statut
+        )
+
+    tenants = query.order_by(
+        Tenant.date_inscription.desc()
+    ).all()
+
+    revenus = sum(
+        (
+            float(t.plan.prix_mensuel)
+            if t.plan else 0
+        )
+        for t in tenants
+        if t.statut == "ACTIF"
+    )
+
+    return render_template(
+        "admin/tenants.html",
+
+        tenants=tenants,
+
+        q=q,
+
+        statut=statut,
+
+        revenus=revenus
+    )
 
 @app.route("/admin/tenants/<int:id>")
 @super_admin_required
@@ -377,6 +652,62 @@ def admin_rubriques():
         db.session.add(r); db.session.commit(); flash("Rubrique créée.","success")
     return render_template("admin/rubriques.html", rubriques=RubriquePaie.query.all())
 
+
+@app.route("/admin/paiements")
+@super_admin_required
+def admin_paiements():
+
+    paiements = Paiement.query.order_by(
+        Paiement.date_creation.desc()
+    ).all()
+
+    total = sum(
+        float(p.montant or 0)
+        for p in paiements
+    )
+
+    nb_attente = sum(
+        1 for p in paiements
+        if p.statut == "EN_ATTENTE"
+    )
+
+    nb_valides = sum(
+        1 for p in paiements
+        if p.statut == "VALIDÉ"
+    )
+
+    return render_template(
+        "admin/paiements.html",
+
+        paiements=paiements,
+
+        total=total,
+
+        nb_attente=nb_attente,
+
+        nb_valides=nb_valides
+    )
+
+
+@app.route("/admin/paiements/<int:id>/valider")
+@super_admin_required
+def valider_paiement(id):
+
+    paiement = Paiement.query.get_or_404(id)
+
+    paiement.statut = "VALIDÉ"
+
+    paiement.tenant.statut = "ACTIF"
+
+    db.session.commit()
+
+    flash(
+        "Paiement validé avec succès.",
+        "success"
+    )
+
+    return redirect(url_for("admin_paiements"))
+
 @app.route("/admin/tenants/<int:id>/supprimer", methods=["POST"])
 @super_admin_required
 def admin_tenant_supprimer(id):
@@ -474,36 +805,138 @@ def salaries():
 @app.route("/salaries/nouveau", methods=["GET","POST"])
 @login_required
 def salarie_nouveau():
-    if current_user.is_super_admin: return redirect(url_for("admin_dashboard"))
-    t=get_tenant()
-    if not t: return redirect(url_for("login"))
-    if not current_user.can_edit: abort(403)
-    cats=CategorieEmploi.query.filter_by(tenant_id=t.id).all()
-    if request.method=="POST":
+
+    if current_user.is_super_admin:
+        return redirect(url_for("admin_dashboard"))
+
+    t = get_tenant()
+
+    if not t:
+        return redirect(url_for("login"))
+
+    if not current_user.can_edit:
+        abort(403)
+
+    cats = CategorieEmploi.query.filter_by(
+        tenant_id=t.id
+    ).all()
+
+    if request.method == "POST":
+
         if not t.est_dans_limite:
-            flash(f"Limite atteinte ({t.plan.max_salaries} salariés). Passez au plan supérieur.","error")
+
+            flash(
+                f"Limite atteinte ({t.plan.max_salaries} salariés). Passez au plan supérieur.",
+                "error"
+            )
+
             return redirect(url_for("salaries"))
-        s=Salarie(tenant_id=t.id,
+
+        s = Salarie(
+            tenant_id=t.id,
             matricule=request.form["matricule"].strip().upper(),
             categorie_id=request.form.get("categorie_id") or None,
-            nom=request.form["nom"].strip().upper(), prenom=request.form["prenom"].strip(),
-            telephone=request.form.get("telephone"), email=request.form.get("email","").strip() or None,
-            nationalite=request.form.get("nationalite","GABONAISE"),
+            nom=request.form["nom"].strip().upper(),
+            prenom=request.form["prenom"].strip(),
+            telephone=request.form.get("telephone"),
+            email=request.form.get("email","").strip() or None,
+            nationalite=request.form.get(
+                "nationalite",
+                "GABONAISE"
+            ),
             sexe=request.form.get("sexe"),
-            date_naissance=_pd(request.form.get("date_naissance")),
-            date_embauche=_pd(request.form["date_embauche"]),
-            situation_matrimoniale=request.form.get("situation_matrimoniale"),
-            nb_enfants=int(request.form.get("nb_enfants") or 0),
-            nb_enfants_moins_16ans=int(request.form.get("nb_enfants_moins_16ans") or 0),
-            nombre_parts=float(request.form.get("nombre_parts") or 1),
-            numero_cnss=request.form.get("numero_cnss"), numero_cnamgs=request.form.get("numero_cnamgs"),
-            emploi=request.form.get("emploi"), assujetti_cnamgs=request.form.get("assujetti_cnamgs")=="OUI", statut="ACTIF")
+            date_naissance=_pd(
+                request.form.get("date_naissance")
+            ),
+            date_embauche=_pd(
+                request.form["date_embauche"]
+            ),
+            situation_matrimoniale=request.form.get(
+                "situation_matrimoniale"
+            ),
+            nb_enfants=int(
+                request.form.get(
+                    "nb_enfants"
+                ) or 0
+            ),
+            nb_enfants_moins_16ans=int(
+                request.form.get(
+                    "nb_enfants_moins_16ans"
+                ) or 0
+            ),
+            nombre_parts=float(
+                request.form.get(
+                    "nombre_parts"
+                ) or 1
+            ),
+            numero_cnss=request.form.get(
+                "numero_cnss"
+            ),
+            numero_cnamgs=request.form.get(
+                "numero_cnamgs"
+            ),
+            emploi=request.form.get(
+                "emploi"
+            ),
+            assujetti_cnamgs=(
+                request.form.get(
+                    "assujetti_cnamgs"
+                ) == "OUI"
+            ),
+            statut="ACTIF"
+        )
+
         db.session.add(s)
-        sb=float(request.form.get("salaire_base") or 0)
-        if sb: db.session.add(Contrat(tenant_id=t.id,salarie=s,type_contrat=request.form.get("type_contrat","CDI"),date_debut=s.date_embauche,salaire_base=sb,poste=s.emploi,actif=True))
-        db.session.commit(); flash(f"Salarié {s.nom_complet} créé.","success")
-        return redirect(url_for("salarie_detail",id=s.id))
-    return render_template("tenant/salarie_form.html", salarie=None, categories=cats, action="nouveau", tenant=t)
+
+        sb = float(
+            request.form.get(
+                "salaire_base"
+            ) or 0
+        )
+
+        if sb:
+
+            contrat = Contrat(
+                tenant_id=t.id,
+                salarie=s,
+                type_contrat=request.form.get(
+                    "type_contrat",
+                    "CDI"
+                ),
+                date_debut=s.date_embauche,
+                salaire_base=sb,
+                poste=s.emploi,
+                actif=True
+            )
+
+            db.session.add(contrat)
+
+        db.session.commit()
+
+        creer_audit(
+            "Création salarié",
+            f"Salarié {s.nom_complet} créé"
+        )
+
+        flash(
+            f"Salarié {s.nom_complet} créé.",
+            "success"
+        )
+
+        return redirect(
+            url_for(
+                "salarie_detail",
+                id=s.id
+            )
+        )
+
+    return render_template(
+        "tenant/salarie_form.html",
+        salarie=None,
+        categories=cats,
+        action="nouveau",
+        tenant=t
+    )
 
 @app.route("/salaries/<int:id>")
 @login_required
@@ -532,28 +965,177 @@ def salarie_detail(id):
 @app.route("/salaries/<int:id>/modifier", methods=["GET","POST"])
 @login_required
 def salarie_modifier(id):
-    if current_user.is_super_admin: return redirect(url_for("admin_dashboard"))
-    t=get_tenant()
-    if not t: return redirect(url_for("login"))
-    if not current_user.can_edit: abort(403)
-    s = Salarie.query.filter_by(id=id, tenant_id=t.id).first_or_404()
-    cats = CategorieEmploi.query.filter_by(tenant_id=t.id).all()
-    if request.method=="POST":
-        for f,v in [("nom",request.form["nom"].strip().upper()),("prenom",request.form["prenom"].strip()),
-            ("telephone",request.form.get("telephone")),
-            ("email",request.form.get("email","").strip() or None),
-            ("nationalite",request.form.get("nationalite")),
-            ("sexe",request.form.get("sexe")),("date_naissance",_pd(request.form.get("date_naissance"))),
-            ("situation_matrimoniale",request.form.get("situation_matrimoniale")),
-            ("nb_enfants",int(request.form.get("nb_enfants") or 0)),
-            ("nombre_parts",calculer_parts_irpp(request.form.get("situation_matrimoniale",""),int(request.form.get("nb_enfants",0) or 0))),
-            ("numero_cnss",request.form.get("numero_cnss")),("numero_cnamgs",request.form.get("numero_cnamgs")),
-            ("emploi",request.form.get("emploi")),("categorie_id",request.form.get("categorie_id") or None),
-            ("statut",request.form.get("statut","ACTIF")),("date_modification",datetime.utcnow())]:
-            setattr(s,f,v)
-        db.session.commit(); flash("Fiche mise à jour.","success")
-        return redirect(url_for("salarie_detail",id=s.id))
-    return render_template("tenant/salarie_form.html", salarie=s, categories=cats, action="modifier", tenant=t)
+
+    if current_user.is_super_admin:
+        return redirect(url_for("admin_dashboard"))
+
+    t = get_tenant()
+
+    if not t:
+        return redirect(url_for("login"))
+
+    if not current_user.can_edit:
+        abort(403)
+
+    s = Salarie.query.filter_by(
+        id=id,
+        tenant_id=t.id
+    ).first_or_404()
+
+    contrat = Contrat.query.filter_by(
+        salarie_id=s.id,
+        tenant_id=t.id,
+        actif=True
+    ).first()
+
+    cats = CategorieEmploi.query.filter_by(
+        tenant_id=t.id
+    ).all()
+
+    if request.method == "POST":
+
+        for f, v in [
+
+            ("nom",
+             request.form["nom"].strip().upper()),
+
+            ("prenom",
+             request.form["prenom"].strip()),
+
+            ("telephone",
+             request.form.get("telephone")),
+
+            ("email",
+             request.form.get(
+                 "email",
+                 ""
+             ).strip() or None),
+
+            ("nationalite",
+             request.form.get(
+                 "nationalite"
+             )),
+
+            ("sexe",
+             request.form.get(
+                 "sexe"
+             )),
+
+            ("date_naissance",
+             _pd(
+                 request.form.get(
+                     "date_naissance"
+                 )
+             )),
+
+            ("situation_matrimoniale",
+             request.form.get(
+                 "situation_matrimoniale"
+             )),
+
+            ("nb_enfants",
+             int(
+                 request.form.get(
+                     "nb_enfants"
+                 ) or 0
+             )),
+
+            ("nombre_parts",
+             calculer_parts_irpp(
+                 request.form.get(
+                     "situation_matrimoniale",
+                     ""
+                 ),
+                 int(
+                     request.form.get(
+                         "nb_enfants",
+                         0
+                     ) or 0
+                 )
+             )),
+
+            ("numero_cnss",
+             request.form.get(
+                 "numero_cnss"
+             )),
+
+            ("numero_cnamgs",
+             request.form.get(
+                 "numero_cnamgs"
+             )),
+
+            ("emploi",
+             request.form.get(
+                 "emploi"
+             )),
+
+            ("categorie_id",
+             request.form.get(
+                 "categorie_id"
+             ) or None),
+
+            ("statut",
+             request.form.get(
+                 "statut",
+                 "ACTIF"
+             )),
+
+            ("date_modification",
+             datetime.utcnow())
+
+        ]:
+
+            setattr(
+                s,
+                f,
+                v
+            )
+
+        # Mise à jour contrat
+        if contrat:
+
+            contrat.salaire_base = float(
+                request.form.get(
+                    "salaire_base"
+                ) or 0
+            )
+
+            contrat.type_contrat = request.form.get(
+                "type_contrat",
+                "CDI"
+            )
+
+            contrat.poste = request.form.get(
+                "emploi"
+            )
+
+        db.session.commit()
+
+        creer_audit(
+            "Modification salarié",
+            f"Fiche modifiée : {s.nom_complet}"
+        )
+
+        flash(
+            "Fiche mise à jour.",
+            "success"
+        )
+
+        return redirect(
+            url_for(
+                "salarie_detail",
+                id=s.id
+            )
+        )
+
+    return render_template(
+        "tenant/salarie_form.html",
+        salarie=s,
+        contrat=contrat,
+        categories=cats,
+        action="modifier",
+        tenant=t
+    )
 
 # ── Bulletins ─────────────────────────────────────────────────────────────────
 @app.route("/bulletins")
@@ -574,56 +1156,256 @@ def bulletins():
     return render_template("tenant/bulletins.html", periodes=periodes, periode_sel=ps,
         bulletins=buls, masse=masse, statut_filtre=sf, tenant=t)
 
+
 @app.route("/bulletins/saisie", methods=["GET","POST"])
 @login_required
 def bulletin_saisie():
-    if current_user.is_super_admin: return redirect(url_for("admin_dashboard"))
-    t=get_tenant()
-    if not t: return redirect(url_for("login"))
-    if not current_user.can_edit: abort(403)
-    sals=Salarie.query.filter_by(tenant_id=t.id,statut="ACTIF").order_by(Salarie.nom).all()
-    pers=PeriodePaie.query.filter_by(tenant_id=t.id,statut="OUVERT").order_by(PeriodePaie.annee.desc(),PeriodePaie.mois.desc()).all()
-    if request.method=="POST":
-        sid=int(request.form["salarie_id"]); pid=int(request.form["periode_id"])
-        s=Salarie.query.filter_by(id=sid,tenant_id=t.id).first_or_404()
-        periode = PeriodePaie.query.filter_by(id=pid, tenant_id=t.id).first_or_404()
-        # Auto-déduire les acomptes EN_ATTENTE du salarié pour ce mois
+
+    if current_user.is_super_admin:
+        return redirect(url_for("admin_dashboard"))
+
+    t = get_tenant()
+
+    if not t:
+        return redirect(url_for("login"))
+
+    if not current_user.can_edit:
+        abort(403)
+
+    sals = Salarie.query.filter_by(
+        tenant_id=t.id,
+        statut="ACTIF"
+    ).order_by(
+        Salarie.nom
+    ).all()
+
+    pers = PeriodePaie.query.filter_by(
+        tenant_id=t.id,
+        statut="OUVERT"
+    ).order_by(
+        PeriodePaie.annee.desc(),
+        PeriodePaie.mois.desc()
+    ).all()
+
+    if request.method == "POST":
+
+        try:
+
+            sid = int(request.form["salarie_id"])
+            pid = int(request.form["periode_id"])
+
+        except:
+
+            flash(
+                "Salarié ou période invalide.",
+                "error"
+            )
+
+            return redirect(request.url)
+
+        s = Salarie.query.filter_by(
+            id=sid,
+            tenant_id=t.id
+        ).first_or_404()
+
+        periode = PeriodePaie.query.filter_by(
+            id=pid,
+            tenant_id=t.id
+        ).first_or_404()
+
+        # acomptes en attente
         acomptes_en_attente = Acompte.query.filter_by(
-            tenant_id=t.id, salarie_id=sid,
-            mois=periode.mois, annee=periode.annee, statut="EN_ATTENTE").all()
-        total_acomptes = sum(float(a.montant) for a in acomptes_en_attente)
-        donnees={k:float(v) if v else 0 for k,v in request.form.items() if k not in("salarie_id","periode_id","csrf_token","action","nb_jours_travailles")}
-        # Injecter le total des acomptes
+            tenant_id=t.id,
+            salarie_id=sid,
+            mois=periode.mois,
+            annee=periode.annee,
+            statut="EN_ATTENTE"
+        ).all()
+
+        total_acomptes = sum(
+            float(
+                montant_valide(
+                    a.montant,
+                    "Acompte"
+                )
+            )
+            for a in acomptes_en_attente
+        )
+
+        try:
+
+            donnees = {}
+
+            champs_exclus = (
+                "salarie_id",
+                "periode_id",
+                "csrf_token",
+                "action",
+                "nb_jours_travailles"
+            )
+
+            for k, v in request.form.items():
+
+                if k not in champs_exclus:
+
+                    donnees[k] = float(
+                        montant_valide(
+                            v,
+                            k.replace(
+                                "_",
+                                " "
+                            ).capitalize()
+                        )
+                    )
+
+        except ValueError as e:
+
+            flash(
+                str(e),
+                "error"
+            )
+
+            return redirect(request.url)
+
+        # injection acompte automatique
         if total_acomptes > 0:
-            donnees["acompte"] = max(donnees.get("acompte", 0), total_acomptes)
-        res=calculer_bulletin(donnees,nb_parts=float(s.nombre_parts or 1))
-        ex=BulletinPaie.query.filter_by(tenant_id=t.id,salarie_id=sid,periode_id=pid).first()
-        b=ex or BulletinPaie(tenant_id=t.id,salarie_id=sid,periode_id=pid)
-        if not ex: db.session.add(b)
-        for k,v in res.items():
-            if not k.startswith("_") and hasattr(b,k): setattr(b,k,v)
-        b.nb_jours_travailles=int(request.form.get("nb_jours_travailles") or 0)
-        action=request.form.get("action","brouillon")
-        if action=="valider":
-            b.statut="VALIDÉ"; b.date_validation=datetime.utcnow()
-            # Marquer les acomptes comme DÉDUITS
+
+            donnees["acompte"] = max(
+                donnees.get(
+                    "acompte",
+                    0
+                ),
+                total_acomptes
+            )
+
+        res = calculer_bulletin(
+            donnees,
+            nb_parts=float(
+                s.nombre_parts or 1
+            )
+        )
+
+        ex = BulletinPaie.query.filter_by(
+            tenant_id=t.id,
+            salarie_id=sid,
+            periode_id=pid
+        ).first()
+
+        b = ex or BulletinPaie(
+            tenant_id=t.id,
+            salarie_id=sid,
+            periode_id=pid
+        )
+
+        if not ex:
+            db.session.add(b)
+
+        for k, v in res.items():
+
+            if (
+                not k.startswith("_")
+                and hasattr(b, k)
+            ):
+
+                setattr(
+                    b,
+                    k,
+                    v
+                )
+
+        b.nb_jours_travailles = int(
+            request.form.get(
+                "nb_jours_travailles"
+            ) or 0
+        )
+
+        action = request.form.get(
+            "action",
+            "brouillon"
+        )
+
+        if action == "valider":
+
+            b.statut = "VALIDÉ"
+
+            b.date_validation = datetime.utcnow()
+
             for a in acomptes_en_attente:
+
                 a.statut = "DEDUIT"
+
         else:
-            b.statut="BROUILLON"
+
+            b.statut = "BROUILLON"
+
         db.session.commit()
+
+        # AUDIT
+        creer_audit(
+            "Création bulletin",
+            f"Bulletin {b.id} créé pour {s.nom_complet}"
+        )
+
         if total_acomptes > 0:
-            flash(f"Bulletin sauvegardé. Acompte de {int(total_acomptes):,} FCFA déduit automatiquement.".replace(",", " "), "success")
+
+            flash(
+                f"Bulletin sauvegardé. "
+                f"Acompte de {int(total_acomptes):,} FCFA "
+                f"déduit automatiquement.".replace(",", " "),
+                "success"
+            )
+
         else:
-            flash(f"Bulletin {'validé' if b.statut=='VALIDÉ' else 'sauvegardé'}.","success")
-        return redirect(url_for("bulletin_detail",id=b.id))
-    sid=request.args.get("salarie_id",type=int)
-    ss=Salarie.query.filter_by(id=sid,tenant_id=t.id).first() if sid else None
-    c=Contrat.query.filter_by(salarie_id=sid,tenant_id=t.id,actif=True).first() if sid else None
-    acomptes_attente = Acompte.query.filter_by(tenant_id=t.id, salarie_id=sid, statut="EN_ATTENTE").all() if sid else []
-    total_acomptes = sum(float(a.montant) for a in acomptes_attente)
-    return render_template("tenant/bulletin_saisie.html", salaries=sals, periodes=pers, salarie_sel=ss, contrat=c, tenant=t,
-        acomptes_attente=acomptes_attente, total_acomptes=total_acomptes)
+
+            flash(
+                f"Bulletin {'validé' if b.statut=='VALIDÉ' else 'sauvegardé'}.",
+                "success"
+            )
+
+        return redirect(
+            url_for(
+                "bulletin_detail",
+                id=b.id
+            )
+        )
+
+    sid = request.args.get(
+        "salarie_id",
+        type=int
+    )
+
+    ss = Salarie.query.filter_by(
+        id=sid,
+        tenant_id=t.id
+    ).first() if sid else None
+
+    c = Contrat.query.filter_by(
+        salarie_id=sid,
+        tenant_id=t.id,
+        actif=True
+    ).first() if sid else None
+
+    acomptes_attente = Acompte.query.filter_by(
+        tenant_id=t.id,
+        salarie_id=sid,
+        statut="EN_ATTENTE"
+    ).all() if sid else []
+
+    total_acomptes = sum(
+        float(a.montant)
+        for a in acomptes_attente
+    )
+
+    return render_template(
+        "tenant/bulletin_saisie.html",
+        salaries=sals,
+        periodes=pers,
+        salarie_sel=ss,
+        contrat=c,
+        tenant=t,
+        acomptes_attente=acomptes_attente,
+        total_acomptes=total_acomptes
+    )
 
 @app.route("/bulletins/<int:id>")
 @login_required
@@ -637,48 +1419,89 @@ def bulletin_detail(id):
 @app.route("/bulletins/<int:id>/valider", methods=["POST"])
 @login_required
 def bulletin_valider(id):
-    if current_user.is_super_admin: return redirect(url_for("admin_dashboard"))
+
+    if current_user.is_super_admin:
+        return redirect(url_for("admin_dashboard"))
+
     t = get_tenant()
-    if not t: return redirect(url_for("login"))
-    b = BulletinPaie.query.filter_by(id=id, tenant_id=t.id).first_or_404()
+
+    if not t:
+        return redirect(url_for("login"))
+
+    b = BulletinPaie.query.filter_by(
+        id=id,
+        tenant_id=t.id
+    ).first_or_404()
+
     if b.statut == "VALIDÉ":
-        flash("Ce bulletin est déjà validé.", "info")
-        return redirect(url_for("bulletin_detail", id=id))
-    # Marquer aussi les acomptes EN_ATTENTE comme DÉDUITS
+
+        flash(
+            "Ce bulletin est déjà validé.",
+            "info"
+        )
+
+        return redirect(
+            url_for(
+                "bulletin_detail",
+                id=id
+            )
+        )
+
+    # Déduire les acomptes
     acomptes = Acompte.query.filter_by(
-        tenant_id=t.id, salarie_id=b.salarie_id,
-        mois=b.periode.mois, annee=b.periode.annee,
-        statut="EN_ATTENTE").all()
+        tenant_id=t.id,
+        salarie_id=b.salarie_id,
+        mois=b.periode.mois,
+        annee=b.periode.annee,
+        statut="EN_ATTENTE"
+    ).all()
+
     for a in acomptes:
         a.statut = "DEDUIT"
+
     b.statut = "VALIDÉ"
     b.date_validation = datetime.utcnow()
-    db.session.commit()
-    flash("Bulletin validé avec succès.", "success")
-    return redirect(url_for("bulletin_detail", id=id))
 
-@app.route("/bulletins/<int:id>/payer", methods=["POST"])
-@login_required
-def bulletin_paye(id):
-    if current_user.is_super_admin: return redirect(url_for("admin_dashboard"))
-    t = get_tenant()
-    if not t: return redirect(url_for("login"))
-    b = BulletinPaie.query.filter_by(id=id, tenant_id=t.id).first_or_404()
-    b.statut = "PAYÉ"
     db.session.commit()
-    flash("Bulletin marqué comme payé.", "success")
-    return redirect(url_for("bulletin_detail", id=id))
+
+    # Audit
+    creer_audit(
+        "Validation bulletin",
+        f"Bulletin {b.id} validé pour {b.salarie.nom_complet}"
+    )
+
+    flash(
+        "Bulletin validé avec succès.",
+        "success"
+    )
+
+    return redirect(
+        url_for(
+            "bulletin_detail",
+            id=id
+        )
+    )
 
 @app.route("/bulletins/<int:id>/supprimer", methods=["POST"])
 @login_required
 def bulletin_supprimer(id):
 
     if current_user.is_super_admin:
+
         b = BulletinPaie.query.get_or_404(id)
+
         salarie_id = b.salarie_id
 
+        nom_sal = b.salarie.nom_complet
+
         db.session.delete(b)
+
         db.session.commit()
+
+        creer_audit(
+            "Suppression bulletin",
+            f"Bulletin supprimé pour {nom_sal}"
+        )
 
         flash(
             "Bulletin supprimé (super admin).",
@@ -686,7 +1509,10 @@ def bulletin_supprimer(id):
         )
 
         return redirect(
-            url_for("salarie_detail", id=salarie_id)
+            url_for(
+                "salarie_detail",
+                id=salarie_id
+            )
         )
 
     t = get_tenant()
@@ -699,7 +1525,6 @@ def bulletin_supprimer(id):
         tenant_id=t.id
     ).first_or_404()
 
-    # Empêcher suppression si validé ou payé
     if b.statut in ["VALIDÉ", "PAYÉ"]:
 
         flash(
@@ -708,11 +1533,22 @@ def bulletin_supprimer(id):
         )
 
         return redirect(
-            url_for("bulletin_detail", id=id)
+            url_for(
+                "bulletin_detail",
+                id=id
+            )
         )
 
+    nom_sal = b.salarie.nom_complet
+
     db.session.delete(b)
+
     db.session.commit()
+
+    creer_audit(
+        "Suppression bulletin",
+        f"Bulletin supprimé pour {nom_sal}"
+    )
 
     flash(
         "Bulletin supprimé.",
@@ -932,21 +1768,112 @@ def paiement():
     plans = Plan.query.filter_by(actif=True).order_by(Plan.prix_mensuel).all()
     return render_template("tenant/paiement.html", tenant=t, plans=plans)
 
+
 @app.route("/paiement/confirmer", methods=["POST"])
 @login_required
 def paiement_confirmer():
-    if current_user.is_super_admin: return redirect(url_for("admin_dashboard"))
+
+    if current_user.is_super_admin:
+        return redirect(url_for("admin_dashboard"))
+
     t = get_tenant()
-    if not t: return redirect(url_for("login"))
-    mode = request.form.get("mode", "")
-    reference = request.form.get("reference", "").strip()
-    duree = int(request.form.get("duree", 1) or 1)
-    if not reference: flash("Veuillez indiquer une reference.", "error"); return redirect(url_for("paiement"))
-    t.notes = f"PAIEMENT {mode} - Ref: {reference} - {duree} mois - {datetime.now().strftime('%d/%m/%Y')}"
+
+    if not t:
+        return redirect(url_for("login"))
+
+    mode = request.form.get(
+        "mode",
+        ""
+    )
+
+    reference = request.form.get(
+        "reference",
+        ""
+    ).strip()
+
+    duree = int(
+        request.form.get(
+            "duree",
+            1
+        ) or 1
+    )
+
+    plan_id = request.form.get(
+        "plan_id",
+        type=int
+    )
+
+    plan = Plan.query.get(plan_id)
+
+    if not plan:
+
+        flash(
+            "Plan invalide.",
+            "error"
+        )
+
+        return redirect(
+            url_for("paiement")
+        )
+
+    if not reference:
+
+        flash(
+            "Veuillez indiquer une référence.",
+            "error"
+        )
+
+        return redirect(
+            url_for("paiement")
+        )
+
+    montant_total = (
+        float(plan.prix_mensuel)
+        * duree
+    )
+
+    paiement = Paiement(
+
+        tenant_id=t.id,
+
+        plan_id=plan.id,
+
+        montant=montant_total,
+
+        mode=mode,
+
+        reference=reference,
+
+        statut="EN_ATTENTE"
+
+    )
+
+    db.session.add(
+        paiement
+    )
+
     t.statut = "PAIEMENT_EN_ATTENTE"
+
+    t.notes = (
+        f"Paiement {mode} | "
+        f"Ref: {reference}"
+    )
+
     db.session.commit()
-    flash(f"Paiement {mode} ref {reference} enregistre. Activation sous 48h.", "success")
-    return redirect(url_for("parametres"))
+
+    creer_audit(
+        "Paiement abonnement",
+        f"{t.denomination} a soumis un paiement"
+    )
+
+    flash(
+        "Paiement envoyé avec succès. Validation en attente.",
+        "success"
+    )
+
+    return redirect(
+        url_for("parametres")
+    )
 
 # ── Paramètres ────────────────────────────────────────────────────────────────
 @app.route("/parametres")
@@ -1362,65 +2289,356 @@ def acompte_supprimer(id):
 @app.route("/conges")
 @login_required
 def conges():
-    if current_user.is_super_admin: return redirect(url_for("admin_dashboard"))
+
+    if current_user.is_super_admin:
+        return redirect(url_for("admin_dashboard"))
+
     t = get_tenant()
-    if not t: return redirect(url_for("login"))
+
+    if not t:
+        return redirect(url_for("login"))
+
     now = datetime.now()
-    annee = request.args.get("annee", now.year, type=int)
-    q = request.args.get("q", "")
-    salaries_list = Salarie.query.filter_by(tenant_id=t.id, statut="ACTIF").order_by(Salarie.nom).all()
-    soldes = []
+    annee = request.args.get(
+        "annee",
+        now.year,
+        type=int
+    )
+
+    q = request.args.get(
+        "q",
+        ""
+    )
+
+    salaries_list = Salarie.query.filter_by(
+        tenant_id=t.id,
+        statut="ACTIF"
+    ).order_by(
+        Salarie.nom
+    ).all()
+
+    soldes=[]
+
     for s in salaries_list:
-        if q and q.lower() not in f"{s.nom} {s.prenom} {s.matricule}".lower(): continue
-        conge = Conge.query.filter_by(tenant_id=t.id, salarie_id=s.id, annee=annee).first()
-        mois_anc = max(1,(datetime.now().date()-s.date_embauche).days//30) if s.date_embauche else 12
-        jours_auto = round(min(mois_anc,12)*2.0,1)
-        soldes.append({"salarie":s,"conge":conge,
-            "jours_acquis":float(conge.jours_acquis) if conge else jours_auto,
-            "jours_pris":float(conge.jours_pris) if conge else 0,
-            "jours_restants":(float(conge.jours_acquis)-float(conge.jours_pris)) if conge else jours_auto})
-    demandes = Conge.query.filter_by(tenant_id=t.id).filter(Conge.statut.in_(["DEMANDÉ","APPROUVÉ"])).order_by(Conge.date_depart).all()
-    return render_template("tenant/conges.html", tenant=t, soldes=soldes, demandes=demandes,
-        annee=annee, now=now, q=q, salaries=salaries_list)
+
+        if q and q.lower() not in (
+            f"{s.nom} {s.prenom} {s.matricule}"
+        ).lower():
+            continue
+
+
+        # Ancienneté réelle
+        if s.date_embauche:
+
+            mois_anc = max(
+                1,
+                (
+                    datetime.now().date()
+                    - s.date_embauche
+                ).days // 30
+            )
+
+        else:
+
+            mois_anc = 12
+
+
+        # 2 jours par mois travaillé
+        jours_acquis = round(
+            min(
+                mois_anc,
+                12
+            ) * 2,
+            1
+        )
+
+
+        conge = Conge.query.filter_by(
+            tenant_id=t.id,
+            salarie_id=s.id,
+            annee=annee
+        ).first()
+
+
+        jours_pris = float(
+            conge.jours_pris
+        ) if conge else 0
+
+
+        jours_restants=max(
+            0,
+            jours_acquis - jours_pris
+        )
+
+
+        soldes.append({
+
+            "salarie":s,
+
+            "conge":conge,
+
+            "jours_acquis":jours_acquis,
+
+            "jours_pris":jours_pris,
+
+            "jours_restants":jours_restants
+
+        })
+
+
+    demandes = Conge.query.filter_by(
+        tenant_id=t.id
+    ).filter(
+        Conge.statut.in_(
+            [
+                "DEMANDÉ",
+                "APPROUVÉ"
+            ]
+        )
+    ).order_by(
+        Conge.date_depart
+    ).all()
+
+
+    return render_template(
+        "tenant/conges.html",
+        tenant=t,
+        soldes=soldes,
+        demandes=demandes,
+        annee=annee,
+        now=now,
+        q=q,
+        salaries=salaries_list
+    )
 
 @app.route("/conges/nouveau", methods=["GET","POST"])
 @login_required
 def conge_nouveau():
-    if current_user.is_super_admin: return redirect(url_for("admin_dashboard"))
+
+    if current_user.is_super_admin:
+        return redirect(url_for("admin_dashboard"))
+
     t = get_tenant()
-    if not t: return redirect(url_for("login"))
-    salaries_list = Salarie.query.filter_by(tenant_id=t.id, statut="ACTIF").order_by(Salarie.nom).all()
+
+    if not t:
+        return redirect(url_for("login"))
+
+    salaries_list = Salarie.query.filter_by(
+        tenant_id=t.id,
+        statut="ACTIF"
+    ).order_by(
+        Salarie.nom
+    ).all()
+
+
     if request.method == "POST":
-        salarie_id = request.form.get("salarie_id", type=int)
-        annee = request.form.get("annee", datetime.now().year, type=int)
-        date_dep = _parse_date(request.form.get("date_depart"))
-        date_ret = _parse_date(request.form.get("date_retour"))
-        type_c = request.form.get("type_conge", "ANNUEL")
-        jours = (date_ret - date_dep).days + 1 if date_dep and date_ret else 0
-        conge = Conge.query.filter_by(tenant_id=t.id, salarie_id=salarie_id, annee=annee).first()
-        if not conge:
-            s = Salarie.query.get(salarie_id)
-            mois = max(1,(datetime.now().date()-s.date_embauche).days//30) if s.date_embauche else 12
-            conge = Conge(tenant_id=t.id, salarie_id=salarie_id, annee=annee,
-                jours_acquis=round(min(mois,12)*2.0,1), jours_pris=0, type_conge=type_c, statut="DEMANDÉ")
-            db.session.add(conge)
-        conge.date_depart=date_dep; conge.date_retour=date_ret; conge.type_conge=type_c; conge.statut="DEMANDÉ"
-        db.session.commit()
-        flash(f"Demande de congé enregistrée ({jours} jours).", "success")
-        return redirect(url_for("conges"))
-    return render_template("tenant/conge_form.html", tenant=t, salaries=salaries_list, now=datetime.now())
+
+        try:
+
+            salarie_id = request.form.get(
+                "salarie_id",
+                type=int
+            )
+
+            annee = request.form.get(
+                "annee",
+                datetime.now().year,
+                type=int
+            )
+
+            type_c = request.form.get(
+                "type_conge",
+                "ANNUEL"
+            )
+
+            date_dep = _parse_date(
+                request.form.get(
+                    "date_depart"
+                )
+            )
+
+            date_ret = _parse_date(
+                request.form.get(
+                    "date_retour"
+                )
+            )
+
+            # Vérification dates vides
+            if not date_dep or not date_ret:
+
+                flash(
+                    "Veuillez saisir les dates.",
+                    "error"
+                )
+
+                return redirect(
+                    request.url
+                )
+
+
+            # Vérification ordre des dates
+            if date_ret <= date_dep:
+
+                flash(
+                    "La date de retour doit être après la date de départ.",
+                    "error"
+                )
+
+                return redirect(
+                    request.url
+                )
+
+
+            jours = (
+                date_ret - date_dep
+            ).days + 1
+
+
+            # Sécurité jours absurdes
+            if jours <= 0:
+
+                flash(
+                    "Nombre de jours invalide.",
+                    "error"
+                )
+
+                return redirect(
+                    request.url
+                )
+
+
+            conge = Conge.query.filter_by(
+                tenant_id=t.id,
+                salarie_id=salarie_id,
+                annee=annee
+            ).first()
+
+
+            if not conge:
+
+                s = Salarie.query.get(
+                    salarie_id
+                )
+
+                mois = max(
+                    1,
+                    (
+                        datetime.now().date()
+                        - s.date_embauche
+                    ).days // 30
+                ) if s.date_embauche else 12
+
+
+                conge = Conge(
+                    tenant_id=t.id,
+                    salarie_id=salarie_id,
+                    annee=annee,
+                    jours_acquis=round(
+                        min(
+                            mois,
+                            12
+                        ) * 2.0,
+                        1
+                    ),
+                    jours_pris=0,
+                    type_conge=type_c,
+                    statut="DEMANDÉ"
+                )
+
+                db.session.add(
+                    conge
+                )
+
+
+            conge.date_depart = date_dep
+            conge.date_retour = date_ret
+            conge.type_conge = type_c
+            conge.statut = "DEMANDÉ"
+
+            db.session.commit()
+
+            flash(
+                f"Demande de congé enregistrée ({jours} jours).",
+                "success"
+            )
+
+            return redirect(
+                url_for(
+                    "conges"
+                )
+            )
+
+        except Exception as e:
+
+            print(e)
+
+            flash(
+                "Erreur lors de l'enregistrement du congé.",
+                "error"
+            )
+
+            return redirect(
+                request.url
+            )
+
+
+    return render_template(
+        "tenant/conge_form.html",
+        tenant=t,
+        salaries=salaries_list,
+        now=datetime.now()
+    )
 
 @app.route("/conges/<int:id>/approuver", methods=["POST"])
 @login_required
 def conge_approuver(id):
+
     t = get_tenant()
-    if not t: return redirect(url_for("login"))
-    c = Conge.query.filter_by(id=id, tenant_id=t.id).first_or_404()
+
+    if not t:
+        return redirect(url_for("login"))
+
+    c = Conge.query.filter_by(
+        id=id,
+        tenant_id=t.id
+    ).first_or_404()
+
+    if c.statut == "APPROUVÉ":
+
+        flash(
+            "Ce congé est déjà approuvé.",
+            "warning"
+        )
+
+        return redirect(
+            url_for("conges")
+        )
+
+
     if c.date_depart and c.date_retour:
-        c.jours_pris = float(c.jours_pris or 0) + (c.date_retour-c.date_depart).days + 1
-    c.statut = "APPROUVÉ"; db.session.commit()
-    flash(f"Congé de {c.salarie.nom_complet} approuvé.", "success")
-    return redirect(url_for("conges"))
+
+        nb_jours = (
+            c.date_retour
+            - c.date_depart
+        ).days + 1
+
+        c.jours_pris = float(
+            c.jours_pris or 0
+        ) + nb_jours
+
+
+    c.statut = "APPROUVÉ"
+
+    db.session.commit()
+
+    flash(
+        f"Congé de {c.salarie.nom_complet} approuvé.",
+        "success"
+    )
+
+    return redirect(
+        url_for("conges")
+    )
 
 @app.route("/conges/<int:id>/refuser", methods=["POST"])
 @login_required
@@ -1538,6 +2756,55 @@ def api_pointage_semaine():
         else: stats[key]["absents"]+=1
     return jsonify(stats)
 
+
+@app.route("/parametres-paie", methods=["GET","POST"])
+@login_required
+def parametres_paie():
+
+    if not current_user.is_super_admin:
+        abort(403)
+
+    params = ParametrePaie.query.order_by(
+        ParametrePaie.libelle
+    ).all()
+
+    if request.method == "POST":
+
+        for p in params:
+
+            val = request.form.get(
+                f"param_{p.id}"
+            )
+
+            try:
+                p.valeur = float(val)
+
+            except:
+                pass
+
+        db.session.commit()
+
+        creer_audit(
+            "Modification paramètres",
+            "Taux réglementaires modifiés"
+        )
+
+        flash(
+            "Paramètres enregistrés.",
+            "success"
+        )
+
+        return redirect(
+            url_for(
+                "parametres_paie"
+            )
+        )
+
+    return render_template(
+        "admin/parametres_paie.html",
+        params=params
+    )
+
 # ── Helpers ───────────────────────────────────────────────────────────────────
 def _pd(v):
     if not v: return None
@@ -1624,6 +2891,41 @@ with app.app_context():
         except Exception as e2: print(f"Erreur create_all: {e2}")
 
 
+with app.app_context():
+
+    db.create_all()
+
+    parametres = [
+
+        ("CNSS_SALARIE","CNSS salarié",0.05),
+        ("CNSS_PATRONAL","CNSS patronal",0.18),
+
+        ("CNAMGS_SALARIE","CNAMGS salarié",0.02),
+        ("CNAMGS_PATRONAL","CNAMGS patronal",0.041),
+
+        ("FNH","FNH",0.03),
+        ("CFP","CFP",0.005),
+        ("TCS","TCS",0.05)
+
+    ]
+
+    for code, libelle, valeur in parametres:
+
+        existe = ParametrePaie.query.filter_by(
+            code=code
+        ).first()
+
+        if not existe:
+
+            db.session.add(
+                ParametrePaie(
+                    code=code,
+                    libelle=libelle,
+                    valeur=valeur
+                )
+            )
+
+    db.session.commit()
         
 
 if __name__=="__main__":

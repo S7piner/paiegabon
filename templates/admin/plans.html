@@ -1,38 +1,353 @@
-<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8"/><script src="https://cdn.tailwindcss.com"></script></head>
-<body class="bg-gray-50 min-h-screen">
-<nav class="bg-purple-900 text-white px-6 py-4 flex items-center gap-4 shadow-lg">
-  <a href="/admin" class="text-xl font-black">Ameriack I.T. Solutions</a>
-  <a href="/admin/plans" class="text-sm font-bold">Plans</a>
-  <a href="/logout" class="ml-auto bg-purple-700 px-3 py-1.5 rounded-lg text-xs font-bold">Déconnexion</a>
-</nav>
-<main class="max-w-5xl mx-auto p-8">
-  {% with messages = get_flashed_messages(with_categories=true) %}{% if messages %}{% for cat,msg in messages %}
-  <div class="mb-4 px-4 py-3 rounded-xl text-sm font-semibold bg-emerald-50 text-emerald-700">{{msg}}</div>
-  {% endfor %}{% endif %}{% endwith %}
-  <h1 class="text-2xl font-black mb-6">Plans d'abonnement</h1>
-  <div class="grid grid-cols-3 gap-5 mb-8">
-    {% for p in plans %}
-    <div class="bg-white rounded-2xl border border-gray-200 p-6 text-center">
-      <div class="text-2xl font-black text-purple-900">{{p.nom}}</div>
-      <div class="text-3xl font-black my-3">{{p.prix_mensuel|int}} <span class="text-sm font-normal text-gray-500">FCFA/mois</span></div>
-      <div class="text-sm text-gray-500 mb-2">Max salariés : <strong>{{p.max_salaries or '∞'}}</strong></div>
-      <div class="text-sm text-gray-500 mb-4">Max utilisateurs : <strong>{{p.max_utilisateurs or '∞'}}</strong></div>
-      <div class="text-xs text-gray-400">{{p.description}}</div>
-      <div class="mt-4"><span class="text-xs font-bold px-2 py-0.5 rounded-full {{'bg-emerald-100 text-emerald-700' if p.actif else 'bg-gray-100 text-gray-500'}}">
-        {{'Actif' if p.actif else 'Inactif'}}</span></div>
-    </div>{% endfor %}
-  </div>
-  <div class="bg-white rounded-2xl border border-gray-200 p-6">
-    <h2 class="font-black mb-4">Créer un nouveau plan</h2>
-    <form method="POST" class="grid grid-cols-3 gap-4">
-      {% macro f(label,name,ph="",type="text") %}<div>
-      <label class="block text-xs font-bold text-gray-500 mb-1.5">{{label}}</label>
-      <input type="{{type}}" name="{{name}}" placeholder="{{ph}}" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none"/></div>{% endmacro %}
-      {{f("Code","code","ENTERPRISE")}}{{f("Nom","nom","Enterprise")}}{{f("Prix mensuel FCFA","prix_mensuel","200000","number")}}
-      {{f("Max salariés (vide=illimité)","max_salaries","200","number")}}{{f("Max utilisateurs","max_utilisateurs","20","number")}}
-      <div><label class="block text-xs font-bold text-gray-500 mb-1.5">Description</label>
-      <input type="text" name="description" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm"/></div>
-      <div class="col-span-3"><button type="submit" class="bg-purple-900 text-white px-6 py-2.5 rounded-xl font-bold text-sm">+ Créer le plan</button></div>
-    </form>
-  </div>
-</main></body></html>
+<!DOCTYPE html>
+<html lang="fr">
+
+<head>
+
+<meta charset="UTF-8"/>
+
+<meta name="viewport"
+      content="width=device-width, initial-scale=1.0"/>
+
+<title>Plans — Super Admin</title>
+
+<script src="https://cdn.tailwindcss.com"></script>
+
+<style>
+
+body{
+    font-family:'Segoe UI',sans-serif;
+}
+
+.sidebar-gradient{
+    background:linear-gradient(180deg,#0f172a 0%,#581c87 100%);
+}
+
+.card-hover{
+    transition:.3s;
+}
+
+.card-hover:hover{
+    transform:translateY(-5px);
+}
+
+</style>
+
+</head>
+
+<body class="bg-slate-100">
+
+<div class="flex min-h-screen">
+
+    <!-- SIDEBAR -->
+    <aside class="w-72 sidebar-gradient text-white flex flex-col">
+
+        <div class="p-8 border-b border-white/10">
+
+            <h1 class="text-3xl font-black leading-tight">
+                Ameriack I.T.<br>
+                Solutions
+            </h1>
+
+            <div class="mt-4">
+                <span class="bg-violet-500 px-4 py-1 rounded-full text-xs font-bold">
+                    SUPER ADMIN
+                </span>
+            </div>
+
+        </div>
+
+        <!-- MENU -->
+        <nav class="flex-1 p-5 space-y-3">
+
+            <a href="/admin"
+               class="flex items-center gap-4 px-5 py-4 rounded-2xl hover:bg-white/10 transition">
+
+                <span class="text-2xl">📊</span>
+                Dashboard
+
+            </a>
+
+            <a href="/admin/tenants"
+               class="flex items-center gap-4 px-5 py-4 rounded-2xl hover:bg-white/10 transition">
+
+                <span class="text-2xl">🏢</span>
+                Entreprises
+
+            </a>
+
+            <a href="/admin/plans"
+               class="flex items-center gap-4 bg-white text-slate-900 px-5 py-4 rounded-2xl font-bold shadow">
+
+                <span class="text-2xl">📦</span>
+                Plans
+
+            </a>
+
+            <a href="/admin/rubriques"
+               class="flex items-center gap-4 px-5 py-4 rounded-2xl hover:bg-white/10 transition">
+
+                <span class="text-2xl">📋</span>
+                Rubriques
+
+            </a>
+
+            <a href="/admin/paiements"
+               class="flex items-center gap-4 px-6 py-5 rounded-3xl bg-white/10 border border-white/20 font-bold">
+
+                <span class="text-3xl">💳</span>
+                Paiements
+
+            </a>
+
+            <a href="/parametres-paie"
+               class="flex items-center gap-4 px-5 py-4 rounded-2xl hover:bg-white/10 transition">
+
+                <span class="text-2xl">⚙️</span>
+                Paramètres paie
+
+            </a>
+
+        </nav>
+
+        <!-- FOOTER -->
+        <div class="p-5">
+
+            <a href="/logout"
+               class="bg-red-500 hover:bg-red-600 transition text-white w-full flex items-center justify-center gap-2 py-4 rounded-2xl font-bold">
+
+                🚪 Déconnexion
+
+            </a>
+
+        </div>
+
+    </aside>
+
+    <!-- MAIN -->
+    <main class="flex-1">
+
+        <!-- TOPBAR -->
+        <div class="bg-white px-10 py-6 shadow-sm flex items-center justify-between">
+
+            <div>
+
+                <h2 class="text-4xl font-black text-slate-900">
+                    Plans d'abonnement
+                </h2>
+
+                <p class="text-slate-500 mt-1">
+                    Gestion des abonnements de la plateforme
+                </p>
+
+            </div>
+
+            <div class="bg-violet-100 text-violet-700 px-5 py-3 rounded-2xl font-bold">
+                📦 Gestion des plans
+            </div>
+
+        </div>
+
+        <!-- CONTENT -->
+        <div class="p-10">
+
+            <!-- ALERT -->
+            {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+            {% for cat,msg in messages %}
+
+            <div class="mb-6 bg-emerald-50 border border-emerald-200 text-emerald-700 px-5 py-4 rounded-2xl font-semibold">
+
+                {{msg}}
+
+            </div>
+
+            {% endfor %}
+            {% endif %}
+            {% endwith %}
+
+            <!-- LISTE DES PLANS -->
+            <div class="grid grid-cols-3 gap-6 mb-10">
+
+                {% for p in plans %}
+
+                <div class="bg-white rounded-3xl shadow-lg p-7 card-hover border border-slate-200">
+
+                    <div class="flex items-center justify-between mb-6">
+
+                        <div>
+
+                            <h3 class="text-2xl font-black text-slate-900">
+                                {{p.nom}}
+                            </h3>
+
+                            <p class="text-slate-400 text-sm mt-1">
+                                {{p.code}}
+                            </p>
+
+                        </div>
+
+                        <div class="
+                        px-3 py-1 rounded-full text-xs font-bold
+
+                        {% if p.actif %}
+                        bg-emerald-100 text-emerald-700
+                        {% else %}
+                        bg-red-100 text-red-600
+                        {% endif %}
+                        ">
+
+                        {{'Actif' if p.actif else 'Inactif'}}
+
+                        </div>
+
+                    </div>
+
+                    <!-- PRIX -->
+                    <div class="mb-6">
+
+                        <div class="text-5xl font-black text-violet-700">
+
+                            {{p.prix_mensuel|int}}
+
+                        </div>
+
+                        <div class="text-slate-500 mt-1">
+                            FCFA / mois
+                        </div>
+
+                    </div>
+
+                    <!-- INFOS -->
+                    <div class="space-y-3 text-sm">
+
+                        <div class="flex justify-between bg-slate-50 rounded-xl px-4 py-3">
+
+                            <span class="text-slate-500">
+                                Max salariés
+                            </span>
+
+                            <span class="font-bold text-slate-800">
+                                {{p.max_salaries or '∞'}}
+                            </span>
+
+                        </div>
+
+                        <div class="flex justify-between bg-slate-50 rounded-xl px-4 py-3">
+
+                            <span class="text-slate-500">
+                                Utilisateurs
+                            </span>
+
+                            <span class="font-bold text-slate-800">
+                                {{p.max_utilisateurs or '∞'}}
+                            </span>
+
+                        </div>
+
+                    </div>
+
+                    <!-- DESCRIPTION -->
+                    <div class="mt-6 text-sm text-slate-500 leading-relaxed">
+
+                        {{p.description or 'Aucune description'}}
+
+                    </div>
+
+                </div>
+
+                {% endfor %}
+
+            </div>
+
+            <!-- FORMULAIRE -->
+            <div class="bg-white rounded-3xl shadow-lg p-8 border border-slate-200">
+
+                <div class="mb-8">
+
+                    <h3 class="text-3xl font-black text-slate-900">
+                        Nouveau plan
+                    </h3>
+
+                    <p class="text-slate-500 mt-2">
+                        Ajouter une nouvelle formule d'abonnement
+                    </p>
+
+                </div>
+
+                <form method="POST"
+                      class="grid grid-cols-3 gap-6">
+
+                    {% macro f(label,name,ph="",type="text") %}
+                    <div>
+
+                        <label class="block text-sm font-bold text-slate-600 mb-2">
+
+                            {{label}}
+
+                        </label>
+
+                        <input
+                            type="{{type}}"
+                            name="{{name}}"
+                            placeholder="{{ph}}"
+
+                            class="w-full border border-slate-200 rounded-2xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-violet-500 bg-slate-50"
+                        >
+
+                    </div>
+                    {% endmacro %}
+
+                    {{f("Code","code","ENTERPRISE")}}
+
+                    {{f("Nom","nom","Enterprise")}}
+
+                    {{f("Prix mensuel","prix_mensuel","200000","number")}}
+
+                    {{f("Max salariés","max_salaries","200","number")}}
+
+                    {{f("Max utilisateurs","max_utilisateurs","20","number")}}
+
+
+                    <div>
+
+                        <label class="block text-sm font-bold text-slate-600 mb-2">
+
+                            Description
+
+                        </label>
+
+                        <input
+                            type="text"
+                            name="description"
+
+                            class="w-full border border-slate-200 rounded-2xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-violet-500 bg-slate-50"
+                        >
+
+                    </div>
+
+                    <!-- BUTTON -->
+                    <div class="col-span-3 pt-2">
+
+                        <button
+                            type="submit"
+
+                            class="bg-gradient-to-r from-violet-700 to-fuchsia-600 hover:opacity-90 transition text-white px-8 py-4 rounded-2xl font-black shadow-lg">
+
+                            ➕ Créer le plan
+
+                        </button>
+
+                    </div>
+
+                </form>
+
+            </div>
+
+        </div>
+
+    </main>
+
+</div>
+
+</body>
+</html>
