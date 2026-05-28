@@ -1594,11 +1594,6 @@ def bulletin_imprimer(id):
 @login_required
 def bulletin_envoyer_email(id):
 
-    import io
-    import os
-    from flask import current_app
-    from flask_mail import Message
-
     if current_user.is_super_admin:
         return redirect(url_for("admin_dashboard"))
 
@@ -1629,26 +1624,43 @@ def bulletin_envoyer_email(id):
         s.email
     ).strip()
 
+    if not app.config.get("MAIL_USERNAME"):
+
+        flash(
+            "Email non configuré.",
+            "error"
+        )
+
+        return redirect(
+            url_for("bulletin_detail", id=id)
+        )
+
     try:
 
-        corps = (
-            f"Bonjour {s.prenom},\n\n"
-            f"Votre bulletin de paie est disponible.\n\n"
-            f"Période : {b.periode.libelle_complet}\n"
-            f"Net à payer : {int(b.net_a_payer or 0):,} FCFA\n\n"
-            f"Cordialement,\n"
-            f"{t.denomination}"
-        ).replace(",", " ")
+        corps = f"""
+Bonjour {s.prenom},
+
+Votre bulletin de paie est disponible.
+
+Période : {b.periode.libelle_complet}
+
+Salaire brut : {int(b.salaire_brut or 0):,} FCFA
+Net à payer : {int(b.net_a_payer or 0):,} FCFA
+
+Merci de vous connecter à votre espace pour consulter votre bulletin.
+
+Cordialement,
+{t.denomination}
+        """.replace(",", " ")
 
         msg = Message(
-            subject=f"Bulletin de paie {b.periode.libelle_complet}",
+            subject=f"Bulletin de paie - {b.periode.libelle_complet}",
             recipients=[dest_email],
             body=corps,
             sender=app.config["MAIL_DEFAULT_SENDER"]
         )
 
-        # VERSION SIMPLE SANS PDF
-        print("EMAIL ENVOYÉ TEST")
+        mail.send(msg)
 
         flash(
             f"Bulletin envoyé avec succès à {dest_email}",
