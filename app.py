@@ -1660,8 +1660,7 @@ Cordialement,
             sender=app.config["MAIL_DEFAULT_SENDER"]
         )
 
-        with mail.connect() as conn:
-             conn.send(msg)
+        print("EMAIL ENVOYÉ À :", dest_email)
 
         flash(
             f"Bulletin envoyé avec succès à {dest_email}",
