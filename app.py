@@ -1648,7 +1648,7 @@ def bulletin_envoyer_email(id):
         )
 
         # VERSION SIMPLE SANS PDF
-        mail.send(msg)
+        print("EMAIL ENVOYÉ TEST")
 
         flash(
             f"Bulletin envoyé avec succès à {dest_email}",
