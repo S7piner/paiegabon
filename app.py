@@ -23,14 +23,28 @@ app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 db.init_app(app)
 
 # Configuration email Gmail
-app.config["MAIL_SERVER"] = os.environ.get("MAIL_SERVER")
-app.config["MAIL_PORT"] = int(os.environ.get("MAIL_PORT", 587))
-app.config["MAIL_USE_TLS"] = os.environ.get("MAIL_USE_TLS") == "True"
+app.config["MAIL_SERVER"] = os.environ.get("MAIL_SERVER", "smtp.gmail.com")
 
-app.config["MAIL_USERNAME"] = os.environ.get("MAIL_USERNAME")
-app.config["MAIL_PASSWORD"] = os.environ.get("MAIL_PASSWORD")
+app.config["MAIL_PORT"] = int(
+    os.environ.get("MAIL_PORT", 587)
+)
 
-app.config["MAIL_DEFAULT_SENDER"] = os.environ.get("MAIL_USERNAME")
+app.config["MAIL_USE_TLS"] = os.environ.get(
+    "MAIL_USE_TLS",
+    "True"
+) == "True"
+
+app.config["MAIL_USERNAME"] = os.environ.get(
+    "MAIL_USERNAME",
+    "wilsonzannou7@gmail.com"
+)
+
+app.config["MAIL_PASSWORD"] = os.environ.get(
+    "MAIL_PASSWORD",
+    "TON_MOT_DE_PASSE_APPLICATION"
+)
+
+app.config["MAIL_DEFAULT_SENDER"] = app.config["MAIL_USERNAME"]
 
 app.config["MAIL_SUPPRESS_SEND"] = False
 
@@ -1582,22 +1596,8 @@ def bulletin_envoyer_email(id):
 
     import io
     import os
-    from xhtml2pdf import pisa
     from flask import current_app
-
-    # Corrige les chemins images/logo pour PDF local + Render
-    def link_callback(uri, rel):
-
-        if uri.startswith('/static'):
-            path = os.path.join(
-                current_app.root_path,
-                uri.lstrip('/')
-            )
-
-            if os.path.exists(path):
-                return path
-
-        return uri
+    from flask_mail import Message
 
     if current_user.is_super_admin:
         return redirect(url_for("admin_dashboard"))
@@ -1619,6 +1619,7 @@ def bulletin_envoyer_email(id):
             f"{s.nom_complet} n'a pas d'adresse email.",
             "error"
         )
+
         return redirect(
             url_for("bulletin_detail", id=id)
         )
@@ -1628,20 +1629,11 @@ def bulletin_envoyer_email(id):
         s.email
     ).strip()
 
-    if not app.config.get("MAIL_USERNAME"):
-        flash(
-            "Email non configuré.",
-            "error"
-        )
-        return redirect(
-            url_for("bulletin_detail", id=id)
-        )
-
     try:
 
         corps = (
             f"Bonjour {s.prenom},\n\n"
-            f"Veuillez trouver votre bulletin de paie ci-joint.\n\n"
+            f"Votre bulletin de paie est disponible.\n\n"
             f"Période : {b.periode.libelle_complet}\n"
             f"Net à payer : {int(b.net_a_payer or 0):,} FCFA\n\n"
             f"Cordialement,\n"
@@ -1655,33 +1647,7 @@ def bulletin_envoyer_email(id):
             sender=app.config["MAIL_DEFAULT_SENDER"]
         )
 
-        html = render_template(
-            "tenant/bulletin_print.html",
-            bulletin=b,
-            tenant=t
-        )
-
-        pdf_buffer = io.BytesIO()
-
-        result = pisa.CreatePDF(
-            html,
-            dest=pdf_buffer,
-            link_callback=link_callback
-        )
-
-        if result.err:
-            raise Exception(
-                "Erreur génération PDF"
-            )
-
-        pdf = pdf_buffer.getvalue()
-
-        msg.attach(
-            f"bulletin_{b.id}.pdf",
-            "application/pdf",
-            pdf
-        )
-
+        # VERSION SIMPLE SANS PDF
         mail.send(msg)
 
         flash(
@@ -1691,10 +1657,7 @@ def bulletin_envoyer_email(id):
 
     except Exception as e:
 
-        print(
-            "ERREUR COMPLETE :",
-            str(e)
-        )
+        print("ERREUR EMAIL :", str(e))
 
         flash(
             f"Erreur envoi : {str(e)}",
